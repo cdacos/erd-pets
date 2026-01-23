@@ -16,6 +16,7 @@ The name plays on the DevOps "pets vs cattle" metaphor — these are diagrams yo
   - `showOpenFilePicker()` to open SQL files
   - Direct write-back to the same file on save
   - No download fallback — keeps implementation simple
+  - Unsupported browsers (Firefox, Safari) see an error message explaining the limitation
 
 ## File Format
 
@@ -29,32 +30,45 @@ public.orders 400 50
 public.orgs 100 200
 
 [contracts]
-contracts.*
-contracts.contract 100 50
+contract.*
+contract.contract 100 50
 */
 
-CREATE TABLE public.users (
-    id SERIAL PRIMARY KEY,
-    email VARCHAR(255) NOT NULL,
-    org_id INT REFERENCES public.orgs(id)
+create table public.users
+(
+    id       integer generated always as identity,
+    email    varchar(255) not null,
+    org_id   integer      not null
 );
 
-CREATE TABLE public.orders (
-    id SERIAL PRIMARY KEY,
-    user_id INT REFERENCES public.users(id),
-    total DECIMAL(10,2)
+create table public.orders
+(
+    id      integer generated always as identity,
+    user_id integer       not null,
+    total   decimal(10,2)
 );
 
-CREATE TABLE public.orgs (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255)
+create table public.orgs
+(
+    id   integer generated always as identity,
+    name varchar(255) not null
 );
 
-CREATE TABLE contracts.contract (
-    id SERIAL PRIMARY KEY,
-    user_id INT REFERENCES public.users(id),
-    value DECIMAL(10,2)
+create table contract.contract
+(
+    id      integer generated always as identity,
+    user_id integer       not null,
+    value   decimal(10,2)
 );
+
+alter table public.users add primary key (id);
+alter table public.orders add primary key (id);
+alter table public.orgs add primary key (id);
+alter table contract.contract add primary key (id);
+
+alter table public.users add foreign key (org_id) references public.orgs;
+alter table public.orders add foreign key (user_id) references public.users;
+alter table contract.contract add foreign key (user_id) references public.users;
 ```
 
 ### Diagram Block Format
@@ -73,11 +87,13 @@ CREATE TABLE contracts.contract (
 ### Rules
 
 - Fully qualified table names required (`public.users`, not `users`)
-- Coordinates are optional — missing coordinates trigger random placement
+- Coordinates are optional — missing coordinates trigger random placement (overlaps acceptable)
 - Wildcards expand to matching tables at parse time, but the wildcard entry itself is preserved on save (catches new tables on next refresh)
 - Explicit entries override wildcard matches for the same table (explicit position wins)
+- Duplicate entries for the same table: warn and last entry wins
 - Only tables listed (explicitly or via wildcard) are rendered
 - Only relationships where both endpoint tables are present in the diagram are rendered
+- If multiple `@erd-pets` blocks exist, warn and use the first one
 
 ### Write Behavior
 
@@ -97,7 +113,10 @@ When saving:
 
 ### Diagram Selection
 - Dropdown to select which diagram to view
+- Default selection is the first diagram defined in the block
 - One diagram rendered at a time
+- If file has no `@erd-pets` block, show empty canvas (no diagrams defined)
+- If a diagram's tables are all removed from the SQL, show empty canvas (diagram entry preserved)
 
 ### Render
 - Each table is a Svelte Flow node showing:
@@ -116,6 +135,7 @@ When saving:
 - Drag tables to reposition
 - Pan and zoom the canvas
 - Minimap for orientation
+- Initial canvas view centered on origin (0,0)
 
 ### Refresh
 - "Refresh" button re-parses the SQL
@@ -149,9 +169,18 @@ Minimal interface:
 |                                          |
 |                            [minimap]     |
 +------------------------------------------+
+| 2 errors [expand]                        |
++------------------------------------------+
 ```
 
 Note: Arrows point from FK table to referenced table.
+
+### Error Reporting
+
+- Errors panel at bottom of screen, collapsed by default
+- Shows count of errors; click to expand
+- Expanded view lists each error with context (e.g., line number, statement snippet)
+- Errors persist until next Load or Refresh clears/replaces them
 
 ## SQL Parsing
 
@@ -175,30 +204,47 @@ The internal schema is explicit and unambiguous:
 Handle these statement types:
 
 ```sql
--- Table definitions
-CREATE TABLE schema.tablename (
-    column_name TYPE,
-    column_name TYPE NOT NULL,
-    column_name TYPE DEFAULT value
+-- Table definitions (multi-line, with defaults and identity)
+create table schema.tablename
+(
+    id              integer generated always as identity,
+    name            text                                         not null,
+    some_fk_id      integer                                      not null,
+    created_at      timestamp with time zone default now()       not null,
+    system_metadata jsonb                    default '{}'::jsonb not null
 );
 
--- Primary keys (separate statement)
-ALTER TABLE schema.tablename ADD PRIMARY KEY (column);
+-- Primary keys (separate ALTER TABLE statement)
+alter table schema.tablename
+    add primary key (column);
 
--- Foreign keys (separate statement)
-ALTER TABLE schema.tablename
-    ADD FOREIGN KEY (column) REFERENCES schema.other_table;
+-- Foreign keys (separate ALTER TABLE statement)
+alter table schema.tablename
+    add foreign key (column) references schema.other_table;
 ```
 
+Column handling:
+- Type is everything between column name and the first modifier keyword (`not null`, `default`, `generated`, etc.) or comma/closing paren
+- Array types like `varchar(5)[]` must be captured correctly
+- Ignore defaults, identity clauses, nullability — only the column name and type are needed for display
+
 Requirements:
+- Case-insensitive keywords (SQL is case-insensitive)
 - Fully qualified table names in CREATE TABLE, ALTER TABLE, and REFERENCES
-- Handle quoted identifiers (e.g., `"grant"` for reserved words)
+- Identifier case handling matches Postgres: unquoted identifiers fold to lowercase, quoted identifiers preserve case (e.g., `"Grant"` and `grant` are distinct)
 - When FK target column is omitted, resolve to the target table's PK
+- If FK target column is omitted and target table has no PK, report a parse error
+- Tables without an explicit PK are valid (they just can't be FK targets without specifying the column)
 - Only explicit `FOREIGN KEY` constraints create relationships (never infer from column names)
+- Multi-pass parsing is acceptable (e.g., collect all tables/PKs first, then resolve FKs)
+- Hand-rolled parser with unit tests (no external SQL parsing library)
+
+Error handling:
+- Parse errors do not abort parsing — log the error and continue with remaining statements
+- Column parse errors skip the column but keep the table with remaining columns
+- All errors are collected and surfaced in the UI (see Error Reporting below)
 
 Ignore: schema creation, system commands, indexes, named constraints, CHECK, UNIQUE, comments, etc.
-
-Assume clean, consistent Postgres syntax. Additional syntax variations (inline constraints, SERIAL, etc.) will be added in future iterations.
 
 ## Phase 2 (future, out of scope for now)
 
@@ -248,4 +294,4 @@ Assume clean, consistent Postgres syntax. Additional syntax variations (inline c
 A buildable Svelte project that:
 - `npm install` && `npm run dev` for development
 - `npm run build` produces a `dist/` folder with static files
-- Works by opening `dist/index.html` in a browser (no server required)
+- May require a local server (e.g., `npx serve dist`) if File System Access API needs secure context
