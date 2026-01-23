@@ -303,6 +303,7 @@ A buildable Svelte project that:
 **Project Setup**
 - Svelte 5 + Vite project initialized
 - @xyflow/svelte (Svelte Flow) integrated
+- Vitest testing framework configured
 - Build produces static files in `dist/`
 
 **Canvas & Rendering**
@@ -324,10 +325,28 @@ A buildable Svelte project that:
 - Two tables: `public.users` and `public.orgs`
 - One FK relationship: `users.org_id` → `orgs.id`
 
+**SQL Parsing [SQL]**
+- Hand-rolled Postgres SQL parser (`src/lib/parser/`)
+- Tokenizer with support for:
+  - Keywords, identifiers (quoted and unquoted)
+  - Proper case handling (unquoted fold to lowercase, quoted preserve case)
+  - Numbers, strings, operators, punctuation
+  - Line comments (`--`) and block comments (`/* */`)
+  - Line number tracking for error reporting
+- Parser extracts:
+  - Table definitions from `CREATE TABLE` (schema, name, columns, types)
+  - Primary keys from `ALTER TABLE ... ADD PRIMARY KEY`
+  - Multi-word types (`timestamp with time zone`, `character varying`)
+  - Array types (`varchar(5)[]`, `integer[]`)
+  - Types with length specifiers (`varchar(255)`, `char(2)`)
+- Error recovery: parse errors don't abort; continues with remaining statements
+- 36 unit tests covering all major parsing scenarios
+- Verified against `samples/contracts.sql` (16 tables, 0 errors)
+
 ### Not Yet Implemented
 
+- SQL parsing: foreign key extraction (Phase 2 of parser)
 - File System Access API integration (Load/Save)
-- SQL parsing (Postgres parser)
 - `@erd-pets` block parsing
 - Multiple diagrams support
 - Refresh functionality
