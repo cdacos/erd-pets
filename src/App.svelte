@@ -48,30 +48,29 @@
 
   /**
    * Determine the best handles for connecting two nodes based on their positions.
-   * Chooses the side of each node that is closest to the other node.
+   * Uses left/right edge of the specific column row, choosing the side closest to the other node.
    * @param {{x: number, y: number}} sourcePos
    * @param {{x: number, y: number}} targetPos
+   * @param {string} sourceColumn
+   * @param {string} targetColumn
    * @returns {{sourceHandle: string, targetHandle: string}}
    */
-  function getBestHandles(sourcePos, targetPos) {
+  function getBestHandles(sourcePos, targetPos, sourceColumn, targetColumn) {
     const dx = targetPos.x - sourcePos.x;
-    const dy = targetPos.y - sourcePos.y;
 
-    // Choose based on which axis has the larger difference
-    if (Math.abs(dx) > Math.abs(dy)) {
-      // Horizontal: target is left or right of source
-      if (dx > 0) {
-        return { sourceHandle: 'right-source', targetHandle: 'left-target' };
-      } else {
-        return { sourceHandle: 'left-source', targetHandle: 'right-target' };
-      }
+    // Connect using the edge closest to the other entity
+    if (dx >= 0) {
+      // Target is to the right of (or same x as) source
+      return {
+        sourceHandle: `right-${sourceColumn}-source`,
+        targetHandle: `left-${targetColumn}-target`,
+      };
     } else {
-      // Vertical: target is above or below source
-      if (dy > 0) {
-        return { sourceHandle: 'bottom-source', targetHandle: 'top-target' };
-      } else {
-        return { sourceHandle: 'top-source', targetHandle: 'bottom-target' };
-      }
+      // Target is to the left of source
+      return {
+        sourceHandle: `left-${sourceColumn}-source`,
+        targetHandle: `right-${targetColumn}-target`,
+      };
     }
   }
 
@@ -138,7 +137,7 @@
       .map((fk) => {
         const sourcePos = positionMap.get(fk.sourceTable);
         const targetPos = positionMap.get(fk.targetTable);
-        const handles = getBestHandles(sourcePos, targetPos);
+        const handles = getBestHandles(sourcePos, targetPos, fk.sourceColumn, fk.targetColumn);
         return {
           id: `${fk.sourceTable}.${fk.sourceColumn}->${fk.targetTable}.${fk.targetColumn}`,
           source: fk.sourceTable,
@@ -146,6 +145,7 @@
           sourceHandle: handles.sourceHandle,
           targetHandle: handles.targetHandle,
           type: 'default',
+          data: { sourceColumn: fk.sourceColumn, targetColumn: fk.targetColumn },
         };
       });
 
@@ -206,7 +206,7 @@
       .map((fk) => {
         const sourcePos = positionMap.get(fk.sourceTable);
         const targetPos = positionMap.get(fk.targetTable);
-        const handles = getBestHandles(sourcePos, targetPos);
+        const handles = getBestHandles(sourcePos, targetPos, fk.sourceColumn, fk.targetColumn);
         return {
           id: `${fk.sourceTable}.${fk.sourceColumn}->${fk.targetTable}.${fk.targetColumn}`,
           source: fk.sourceTable,
@@ -214,6 +214,7 @@
           sourceHandle: handles.sourceHandle,
           targetHandle: handles.targetHandle,
           type: 'default',
+          data: { sourceColumn: fk.sourceColumn, targetColumn: fk.targetColumn },
         };
       });
 
@@ -237,8 +238,10 @@
     edges = edges.map((edge) => {
       const sourcePos = positionMap.get(edge.source);
       const targetPos = positionMap.get(edge.target);
-      if (!sourcePos || !targetPos) return edge;
-      const handles = getBestHandles(sourcePos, targetPos);
+      if (!sourcePos || !targetPos || !edge.data?.sourceColumn || !edge.data?.targetColumn) {
+        return edge;
+      }
+      const handles = getBestHandles(sourcePos, targetPos, edge.data.sourceColumn, edge.data.targetColumn);
       return {
         ...edge,
         sourceHandle: handles.sourceHandle,

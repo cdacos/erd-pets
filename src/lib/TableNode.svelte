@@ -2,17 +2,49 @@
   import { Handle, Position } from '@xyflow/svelte';
 
   let { data } = $props();
+
+  // Layout constants (must match CSS)
+  const HEADER_HEIGHT = 29; // 6px padding * 2 + ~17px text
+  const COLUMNS_TOP_PADDING = 4;
+  const COLUMN_HEIGHT = 22; // 3px padding * 2 + ~16px text
+
+  /**
+   * Calculate vertical offset for a column handle.
+   * @param {number} index - Column index (0-based)
+   * @returns {number} - Pixel offset from top of node
+   */
+  function getColumnTop(index) {
+    return HEADER_HEIGHT + COLUMNS_TOP_PADDING + index * COLUMN_HEIGHT + COLUMN_HEIGHT / 2;
+  }
 </script>
 
-<!-- Handles on all 4 sides for dynamic connection points -->
-<Handle id="top-target" type="target" position={Position.Top} />
-<Handle id="top-source" type="source" position={Position.Top} />
-<Handle id="right-target" type="target" position={Position.Right} />
-<Handle id="right-source" type="source" position={Position.Right} />
-<Handle id="bottom-target" type="target" position={Position.Bottom} />
-<Handle id="bottom-source" type="source" position={Position.Bottom} />
-<Handle id="left-target" type="target" position={Position.Left} />
-<Handle id="left-source" type="source" position={Position.Left} />
+<!-- Per-column handles on left and right edges -->
+{#each data.columns as column, index}
+  <Handle
+    id="left-{column.name}-source"
+    type="source"
+    position={Position.Left}
+    style="top: {getColumnTop(index)}px"
+  />
+  <Handle
+    id="left-{column.name}-target"
+    type="target"
+    position={Position.Left}
+    style="top: {getColumnTop(index)}px"
+  />
+  <Handle
+    id="right-{column.name}-source"
+    type="source"
+    position={Position.Right}
+    style="top: {getColumnTop(index)}px"
+  />
+  <Handle
+    id="right-{column.name}-target"
+    type="target"
+    position={Position.Right}
+    style="top: {getColumnTop(index)}px"
+  />
+{/each}
 
 <div class="table-node">
   <div class="table-header">{data.label}</div>
@@ -31,6 +63,11 @@
 </div>
 
 <style>
+  :global(.svelte-flow .svelte-flow__handle) {
+    opacity: 0;
+    pointer-events: none;
+  }
+
   .table-node {
     background: white;
     border: 2px solid #374151;
