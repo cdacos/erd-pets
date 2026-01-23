@@ -318,12 +318,18 @@ A buildable Svelte project that:
 - Zoom/pan controls
 
 **UI Shell**
-- Header toolbar with placeholder buttons: Load SQL, Refresh, Save
+- Header toolbar with functional Load SQL, Refresh, Save buttons
+- Refresh/Save disabled until a file is loaded
 - Diagram selector dropdown (placeholder)
+- Toast notifications for errors and success messages (`src/lib/Toast.svelte`)
 
-**Hardcoded Demo Data**
-- Two tables: `public.users` and `public.orgs`
-- One FK relationship: `users.org_id` → `orgs.id`
+**File Handling**
+- File System Access API integration (`src/lib/file.js`)
+- `showOpenFilePicker()` to open SQL files with `.sql` filter
+- Direct write-back to the same file on Save
+- Refresh re-reads file from disk
+- Browser compatibility check with error message for unsupported browsers
+- Tables displayed in grid layout (3 columns) after loading
 
 **SQL Parsing [SQL]**
 - Hand-rolled Postgres SQL parser (`src/lib/parser/`)
@@ -347,8 +353,6 @@ A buildable Svelte project that:
 - Verified against `samples/contracts.sql` (16 tables, 15 FKs, 0 errors)
 
 ### Not Yet Implemented
-- File System Access API integration (Load/Save)
-- `@erd-pets` block parsing
+- `@erd-pets` block parsing (positions currently ignored; save writes original SQL)
 - Multiple diagrams support
-- Refresh functionality
-- Error panel
+- Error panel (currently using toast notifications)
