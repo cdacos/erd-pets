@@ -4,6 +4,7 @@
     Controls,
     Background,
     MiniMap,
+    MarkerType,
   } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
   import TableNode from './lib/TableNode.svelte';
@@ -145,6 +146,7 @@
           sourceHandle: handles.sourceHandle,
           targetHandle: handles.targetHandle,
           type: 'default',
+          markerEnd: { type: MarkerType.ArrowClosed, width: 25, height: 25 },
           data: { sourceColumn: fk.sourceColumn, targetColumn: fk.targetColumn },
         };
       });
@@ -214,6 +216,7 @@
           sourceHandle: handles.sourceHandle,
           targetHandle: handles.targetHandle,
           type: 'default',
+          markerEnd: { type: MarkerType.ArrowClosed, width: 25, height: 25 },
           data: { sourceColumn: fk.sourceColumn, targetColumn: fk.targetColumn },
         };
       });
