@@ -1,4 +1,4 @@
-/** @import { Table, Column, ParseError, ParseResult } from './types.js' */
+/** @import { Table, Column, ForeignKey, ParseError, ParseResult } from './types.js' */
 import { tokenize, TokenStream } from './tokenizer.js';
 
 /**
@@ -32,6 +32,8 @@ export function parsePostgresSQL(sql) {
 
 	/** @type {Table[]} */
 	const tables = [];
+	/** @type {ForeignKey[]} */
+	const foreignKeys = [];
 	/** @type {ParseError[]} */
 	const errors = [];
 	/** @type {Map<string, Table>} */
@@ -70,7 +72,7 @@ export function parsePostgresSQL(sql) {
 				if (stream.is('KEYWORD', 'TABLE')) {
 					stream.next(); // consume TABLE
 
-					parseAlterTable(stream, tableMap, errors);
+					parseAlterTable(stream, tableMap, foreignKeys, errors);
 				} else {
 					stream.restore(saved);
 					stream.next();
@@ -88,7 +90,7 @@ export function parsePostgresSQL(sql) {
 		}
 	}
 
-	return { tables, errors };
+	return { tables, foreignKeys, errors };
 }
 
 /**
@@ -433,21 +435,22 @@ function skipToNextStatement(stream) {
 }
 
 /**
- * Parse ALTER TABLE statement for primary keys
+ * Parse ALTER TABLE statement for primary keys and foreign keys
  * @param {TokenStream} stream
  * @param {Map<string, Table>} tableMap
+ * @param {ForeignKey[]} foreignKeys
  * @param {ParseError[]} errors
  */
-function parseAlterTable(stream, tableMap, errors) {
+function parseAlterTable(stream, tableMap, foreignKeys, errors) {
 	const { schema, name } = parseQualifiedName(stream);
 	const qualifiedName = `${schema}.${name}`;
 
-	// Look for ADD PRIMARY KEY
+	// Look for ADD PRIMARY KEY or ADD FOREIGN KEY
 	while (!stream.isEOF() && !stream.is('PUNCTUATION', ';')) {
 		if (stream.is('KEYWORD', 'ADD')) {
 			stream.next();
 
-			// Could be ADD CONSTRAINT name PRIMARY KEY or ADD PRIMARY KEY
+			// Could be ADD CONSTRAINT name PRIMARY/FOREIGN KEY or ADD PRIMARY/FOREIGN KEY
 			if (stream.is('KEYWORD', 'CONSTRAINT')) {
 				stream.next();
 				parseIdentifier(stream); // constraint name
@@ -475,6 +478,73 @@ function parseAlterTable(stream, tableMap, errors) {
 								const column = table.columns.find((c) => c.name === pkCol);
 								if (column) {
 									column.isPrimaryKey = true;
+								}
+							}
+						}
+					}
+				}
+			} else if (stream.is('KEYWORD', 'FOREIGN')) {
+				const fkLine = stream.line();
+				stream.next();
+				if (stream.match('KEYWORD', 'KEY')) {
+					// Parse source column(s)
+					if (stream.match('PUNCTUATION', '(')) {
+						const sourceColumns = [];
+						while (!stream.isEOF() && !stream.is('PUNCTUATION', ')')) {
+							const col = parseIdentifier(stream);
+							if (col) {
+								sourceColumns.push(col);
+							}
+							stream.match('PUNCTUATION', ',');
+						}
+						stream.match('PUNCTUATION', ')');
+
+						// Expect REFERENCES
+						if (stream.match('KEYWORD', 'REFERENCES')) {
+							const { schema: targetSchema, name: targetName } = parseQualifiedName(stream);
+							const targetQualifiedName = `${targetSchema}.${targetName}`;
+
+							// Check for optional target column(s)
+							let targetColumns = [];
+							if (stream.match('PUNCTUATION', '(')) {
+								while (!stream.isEOF() && !stream.is('PUNCTUATION', ')')) {
+									const col = parseIdentifier(stream);
+									if (col) {
+										targetColumns.push(col);
+									}
+									stream.match('PUNCTUATION', ',');
+								}
+								stream.match('PUNCTUATION', ')');
+							}
+
+							// If no target columns specified, resolve to PK
+							if (targetColumns.length === 0) {
+								const targetTable = tableMap.get(targetQualifiedName);
+								if (targetTable) {
+									const pkColumns = targetTable.columns.filter((c) => c.isPrimaryKey);
+									if (pkColumns.length > 0) {
+										targetColumns = pkColumns.map((c) => c.name);
+									} else {
+										errors.push({
+											message: `Foreign key references ${targetQualifiedName} which has no primary key`,
+											line: fkLine
+										});
+									}
+								}
+								// If target table not found, we still create the FK (table might be defined later or external)
+								// but we can't resolve the column
+							}
+
+							// Create FK entries (one per source column if multiple)
+							for (let i = 0; i < sourceColumns.length; i++) {
+								const targetCol = targetColumns[i] || targetColumns[0] || '';
+								if (targetCol || targetColumns.length === 0) {
+									foreignKeys.push({
+										sourceTable: qualifiedName,
+										sourceColumn: sourceColumns[i],
+										targetTable: targetQualifiedName,
+										targetColumn: targetCol
+									});
 								}
 							}
 						}

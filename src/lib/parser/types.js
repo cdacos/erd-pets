@@ -14,6 +14,14 @@
  */
 
 /**
+ * @typedef {Object} ForeignKey
+ * @property {string} sourceTable - Fully qualified source table name (schema.table)
+ * @property {string} sourceColumn - Column in the source table
+ * @property {string} targetTable - Fully qualified target table name (schema.table)
+ * @property {string} targetColumn - Column in the target table (resolved from PK if not specified)
+ */
+
+/**
  * @typedef {Object} ParseError
  * @property {string} message
  * @property {number} [line]
@@ -23,6 +31,7 @@
 /**
  * @typedef {Object} ParseResult
  * @property {Table[]} tables
+ * @property {ForeignKey[]} foreignKeys
  * @property {ParseError[]} errors
  */
 

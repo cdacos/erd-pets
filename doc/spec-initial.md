@@ -340,12 +340,13 @@ A buildable Svelte project that:
   - Array types (`varchar(5)[]`, `integer[]`)
   - Types with length specifiers (`varchar(255)`, `char(2)`)
 - Error recovery: parse errors don't abort; continues with remaining statements
-- 36 unit tests covering all major parsing scenarios
-- Verified against `samples/contracts.sql` (16 tables, 0 errors)
+- Foreign key extraction from `ALTER TABLE ... ADD FOREIGN KEY`
+- FK target column resolution to PK when not specified
+- Error reporting when FK target has no PK
+- 47 unit tests covering all major parsing scenarios
+- Verified against `samples/contracts.sql` (16 tables, 15 FKs, 0 errors)
 
 ### Not Yet Implemented
-
-- SQL parsing: foreign key extraction (Phase 2 of parser)
 - File System Access API integration (Load/Save)
 - `@erd-pets` block parsing
 - Multiple diagrams support

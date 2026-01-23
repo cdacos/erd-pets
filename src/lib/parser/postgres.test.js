@@ -399,7 +399,277 @@ describe('parsePostgresSQL', () => {
 	});
 });
 
+describe('parsePostgresSQL foreign keys', () => {
+	it('parses a simple foreign key with explicit target column', () => {
+		const sql = `
+      CREATE TABLE users (id integer, name text);
+      CREATE TABLE posts (id integer, user_id integer);
+      ALTER TABLE users ADD PRIMARY KEY (id);
+      ALTER TABLE posts ADD PRIMARY KEY (id);
+      ALTER TABLE posts ADD FOREIGN KEY (user_id) REFERENCES users (id);
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.foreignKeys).toHaveLength(1);
+		expect(result.foreignKeys[0]).toEqual({
+			sourceTable: 'public.posts',
+			sourceColumn: 'user_id',
+			targetTable: 'public.users',
+			targetColumn: 'id'
+		});
+	});
+
+	it('resolves target column to PK when not specified', () => {
+		const sql = `
+      CREATE TABLE users (id integer, name text);
+      CREATE TABLE posts (id integer, user_id integer);
+      ALTER TABLE users ADD PRIMARY KEY (id);
+      ALTER TABLE posts ADD PRIMARY KEY (id);
+      ALTER TABLE posts ADD FOREIGN KEY (user_id) REFERENCES users;
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.foreignKeys).toHaveLength(1);
+		expect(result.foreignKeys[0]).toEqual({
+			sourceTable: 'public.posts',
+			sourceColumn: 'user_id',
+			targetTable: 'public.users',
+			targetColumn: 'id'
+		});
+	});
+
+	it('reports error when target has no PK and column not specified', () => {
+		const sql = `
+      CREATE TABLE users (id integer, name text);
+      CREATE TABLE posts (id integer, user_id integer);
+      ALTER TABLE posts ADD FOREIGN KEY (user_id) REFERENCES users;
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.errors).toHaveLength(1);
+		expect(result.errors[0].message).toContain('public.users');
+		expect(result.errors[0].message).toContain('no primary key');
+	});
+
+	it('parses schema-qualified foreign keys', () => {
+		const sql = `
+      CREATE TABLE contract.contract_type (id integer);
+      CREATE TABLE contract.contract (id integer, contract_type_id integer);
+      ALTER TABLE contract.contract_type ADD PRIMARY KEY (id);
+      ALTER TABLE contract.contract ADD PRIMARY KEY (id);
+      ALTER TABLE contract.contract ADD FOREIGN KEY (contract_type_id) REFERENCES contract.contract_type;
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.foreignKeys).toHaveLength(1);
+		expect(result.foreignKeys[0]).toEqual({
+			sourceTable: 'contract.contract',
+			sourceColumn: 'contract_type_id',
+			targetTable: 'contract.contract_type',
+			targetColumn: 'id'
+		});
+	});
+
+	it('parses foreign keys with quoted identifiers', () => {
+		const sql = `
+      CREATE TABLE contract.grant_capacity (id integer);
+      CREATE TABLE contract."grant" (id integer, grant_capacity_id integer);
+      ALTER TABLE contract.grant_capacity ADD PRIMARY KEY (id);
+      ALTER TABLE contract."grant" ADD PRIMARY KEY (id);
+      ALTER TABLE contract."grant" ADD FOREIGN KEY (grant_capacity_id) REFERENCES contract.grant_capacity;
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.foreignKeys).toHaveLength(1);
+		expect(result.foreignKeys[0]).toEqual({
+			sourceTable: 'contract.grant',
+			sourceColumn: 'grant_capacity_id',
+			targetTable: 'contract.grant_capacity',
+			targetColumn: 'id'
+		});
+	});
+
+	it('parses multiple foreign keys from same table', () => {
+		const sql = `
+      CREATE TABLE contract.contract_type (id integer);
+      CREATE TABLE contract.state_type (id integer);
+      CREATE TABLE contract.scope (id integer, contract_id integer, state_type_id integer);
+      ALTER TABLE contract.contract_type ADD PRIMARY KEY (id);
+      ALTER TABLE contract.state_type ADD PRIMARY KEY (id);
+      ALTER TABLE contract.scope ADD PRIMARY KEY (id);
+      ALTER TABLE contract.scope ADD FOREIGN KEY (contract_id) REFERENCES contract.contract_type;
+      ALTER TABLE contract.scope ADD FOREIGN KEY (state_type_id) REFERENCES contract.state_type;
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.foreignKeys).toHaveLength(2);
+		expect(result.foreignKeys[0].sourceColumn).toBe('contract_id');
+		expect(result.foreignKeys[1].sourceColumn).toBe('state_type_id');
+	});
+
+	it('parses foreign keys with named constraints', () => {
+		const sql = `
+      CREATE TABLE users (id integer);
+      CREATE TABLE posts (id integer, user_id integer);
+      ALTER TABLE users ADD PRIMARY KEY (id);
+      ALTER TABLE posts ADD CONSTRAINT fk_posts_user FOREIGN KEY (user_id) REFERENCES users (id);
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.foreignKeys).toHaveLength(1);
+		expect(result.foreignKeys[0].sourceColumn).toBe('user_id');
+	});
+
+	it('parses cross-schema foreign keys', () => {
+		const sql = `
+      CREATE TABLE asset.asset (id bigint);
+      CREATE TABLE contract.manifest_asset (id integer, asset_id bigint);
+      ALTER TABLE asset.asset ADD PRIMARY KEY (id);
+      ALTER TABLE contract.manifest_asset ADD PRIMARY KEY (id);
+      ALTER TABLE contract.manifest_asset ADD FOREIGN KEY (asset_id) REFERENCES asset.asset;
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.foreignKeys).toHaveLength(1);
+		expect(result.foreignKeys[0]).toEqual({
+			sourceTable: 'contract.manifest_asset',
+			sourceColumn: 'asset_id',
+			targetTable: 'asset.asset',
+			targetColumn: 'id'
+		});
+	});
+
+	it('returns empty foreignKeys array when no FKs defined', () => {
+		const sql = `
+      CREATE TABLE users (id integer);
+      ALTER TABLE users ADD PRIMARY KEY (id);
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.foreignKeys).toEqual([]);
+	});
+
+	it('creates FK even when target table not found (external reference)', () => {
+		const sql = `
+      CREATE TABLE posts (id integer, user_id integer);
+      ALTER TABLE posts ADD FOREIGN KEY (user_id) REFERENCES external.users (id);
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.foreignKeys).toHaveLength(1);
+		expect(result.foreignKeys[0]).toEqual({
+			sourceTable: 'public.posts',
+			sourceColumn: 'user_id',
+			targetTable: 'external.users',
+			targetColumn: 'id'
+		});
+		expect(result.errors).toHaveLength(0);
+	});
+});
+
 describe('parsePostgresSQL with contracts.sql patterns', () => {
+	it('parses all foreign keys from contracts.sql pattern', () => {
+		const sql = `
+      CREATE TABLE asset.asset (id bigint);
+      CREATE TABLE contract.contract (id integer, contract_type_id integer);
+      CREATE TABLE contract.contract_type (id integer);
+      CREATE TABLE contract."grant" (id integer, grant_capacity_id integer, grant_type_id integer);
+      CREATE TABLE contract.grant_capacity (id integer);
+      CREATE TABLE contract.grant_type (id integer);
+      CREATE TABLE contract.manifest (id integer);
+      CREATE TABLE contract.manifest_asset (id integer, manifest_id integer, asset_id bigint);
+      CREATE TABLE contract.scope (id integer, contract_id integer, state_type_id integer);
+      CREATE TABLE contract.state_type (id integer);
+      CREATE TABLE contract.date_type (id integer);
+      CREATE TABLE contract.scope_date (id integer, date_type_id integer, scope_id integer);
+      CREATE TABLE contract.scope_grant (id integer, scope_id integer, grant_id integer);
+      CREATE TABLE contract.scope_manifest (id integer, scope_id integer, manifest_id integer);
+      CREATE TABLE contract.region (id integer);
+      CREATE TABLE contract.scope_region (id integer, region_id integer, scope_id integer);
+
+      ALTER TABLE asset.asset ADD PRIMARY KEY (id);
+      ALTER TABLE contract.contract ADD PRIMARY KEY (id);
+      ALTER TABLE contract.contract_type ADD PRIMARY KEY (id);
+      ALTER TABLE contract."grant" ADD PRIMARY KEY (id);
+      ALTER TABLE contract.grant_capacity ADD PRIMARY KEY (id);
+      ALTER TABLE contract.grant_type ADD PRIMARY KEY (id);
+      ALTER TABLE contract.manifest ADD PRIMARY KEY (id);
+      ALTER TABLE contract.manifest_asset ADD PRIMARY KEY (id);
+      ALTER TABLE contract.scope ADD PRIMARY KEY (id);
+      ALTER TABLE contract.state_type ADD PRIMARY KEY (id);
+      ALTER TABLE contract.date_type ADD PRIMARY KEY (id);
+      ALTER TABLE contract.scope_date ADD PRIMARY KEY (id);
+      ALTER TABLE contract.scope_grant ADD PRIMARY KEY (id);
+      ALTER TABLE contract.scope_manifest ADD PRIMARY KEY (id);
+      ALTER TABLE contract.region ADD PRIMARY KEY (id);
+      ALTER TABLE contract.scope_region ADD PRIMARY KEY (id);
+
+      ALTER TABLE contract.contract ADD FOREIGN KEY (contract_type_id) REFERENCES contract.contract_type;
+      ALTER TABLE contract."grant" ADD FOREIGN KEY (grant_capacity_id) REFERENCES contract.grant_capacity;
+      ALTER TABLE contract."grant" ADD FOREIGN KEY (grant_type_id) REFERENCES contract.grant_type;
+      ALTER TABLE contract.manifest_asset ADD FOREIGN KEY (manifest_id) REFERENCES contract.manifest;
+      ALTER TABLE contract.manifest_asset ADD FOREIGN KEY (asset_id) REFERENCES asset.asset;
+      ALTER TABLE contract.scope ADD FOREIGN KEY (contract_id) REFERENCES contract.contract;
+      ALTER TABLE contract.scope ADD FOREIGN KEY (state_type_id) REFERENCES contract.state_type;
+      ALTER TABLE contract.scope_date ADD FOREIGN KEY (date_type_id) REFERENCES contract.date_type;
+      ALTER TABLE contract.scope_date ADD FOREIGN KEY (scope_id) REFERENCES contract.scope;
+      ALTER TABLE contract.scope_grant ADD FOREIGN KEY (scope_id) REFERENCES contract.scope;
+      ALTER TABLE contract.scope_grant ADD FOREIGN KEY (grant_id) REFERENCES contract."grant";
+      ALTER TABLE contract.scope_manifest ADD FOREIGN KEY (scope_id) REFERENCES contract.scope;
+      ALTER TABLE contract.scope_manifest ADD FOREIGN KEY (manifest_id) REFERENCES contract.manifest;
+      ALTER TABLE contract.scope_region ADD FOREIGN KEY (region_id) REFERENCES contract.region;
+      ALTER TABLE contract.scope_region ADD FOREIGN KEY (scope_id) REFERENCES contract.scope;
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.errors).toHaveLength(0);
+		expect(result.foreignKeys).toHaveLength(15);
+
+		// Verify a few specific FKs
+		const contractTypeFK = result.foreignKeys.find(
+			(fk) => fk.sourceTable === 'contract.contract' && fk.sourceColumn === 'contract_type_id'
+		);
+		expect(contractTypeFK).toEqual({
+			sourceTable: 'contract.contract',
+			sourceColumn: 'contract_type_id',
+			targetTable: 'contract.contract_type',
+			targetColumn: 'id'
+		});
+
+		// Cross-schema FK
+		const assetFK = result.foreignKeys.find(
+			(fk) => fk.sourceTable === 'contract.manifest_asset' && fk.sourceColumn === 'asset_id'
+		);
+		expect(assetFK).toEqual({
+			sourceTable: 'contract.manifest_asset',
+			sourceColumn: 'asset_id',
+			targetTable: 'asset.asset',
+			targetColumn: 'id'
+		});
+
+		// FK to quoted identifier table
+		const grantFK = result.foreignKeys.find(
+			(fk) => fk.sourceTable === 'contract.scope_grant' && fk.sourceColumn === 'grant_id'
+		);
+		expect(grantFK).toEqual({
+			sourceTable: 'contract.scope_grant',
+			sourceColumn: 'grant_id',
+			targetTable: 'contract.grant',
+			targetColumn: 'id'
+		});
+	});
+
 	it('parses asset.asset table pattern', () => {
 		const sql = `
       CREATE TABLE asset.asset (
