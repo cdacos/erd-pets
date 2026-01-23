@@ -295,3 +295,40 @@ A buildable Svelte project that:
 - `npm install` && `npm run dev` for development
 - `npm run build` produces a `dist/` folder with static files
 - May require a local server (e.g., `npx serve dist`) if File System Access API needs secure context
+
+## Implementation Status
+
+### Completed
+
+**Project Setup**
+- Svelte 5 + Vite project initialized
+- @xyflow/svelte (Svelte Flow) integrated
+- Build produces static files in `dist/`
+
+**Canvas & Rendering**
+- Full-screen Svelte Flow canvas with pan/zoom
+- Custom `TableNode` component displaying:
+  - Table name in header
+  - Columns with types
+  - PK indicator (yellow badge)
+  - FK indicator (blue badge)
+- Edge rendering between related tables
+- MiniMap for orientation
+- Zoom/pan controls
+
+**UI Shell**
+- Header toolbar with placeholder buttons: Load SQL, Refresh, Save
+- Diagram selector dropdown (placeholder)
+
+**Hardcoded Demo Data**
+- Two tables: `public.users` and `public.orgs`
+- One FK relationship: `users.org_id` → `orgs.id`
+
+### Not Yet Implemented
+
+- File System Access API integration (Load/Save)
+- SQL parsing (Postgres parser)
+- `@erd-pets` block parsing
+- Multiple diagrams support
+- Refresh functionality
+- Error panel
