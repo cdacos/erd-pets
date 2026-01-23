@@ -4,7 +4,15 @@
   let { data } = $props();
 </script>
 
-<Handle type="target" position={Position.Left} />
+<!-- Handles on all 4 sides for dynamic connection points -->
+<Handle id="top-target" type="target" position={Position.Top} />
+<Handle id="top-source" type="source" position={Position.Top} />
+<Handle id="right-target" type="target" position={Position.Right} />
+<Handle id="right-source" type="source" position={Position.Right} />
+<Handle id="bottom-target" type="target" position={Position.Bottom} />
+<Handle id="bottom-source" type="source" position={Position.Bottom} />
+<Handle id="left-target" type="target" position={Position.Left} />
+<Handle id="left-source" type="source" position={Position.Left} />
 
 <div class="table-node">
   <div class="table-header">{data.label}</div>
@@ -21,8 +29,6 @@
     {/each}
   </div>
 </div>
-
-<Handle type="source" position={Position.Right} />
 
 <style>
   .table-node {

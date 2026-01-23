@@ -47,6 +47,35 @@
   let diagramNames = $derived(erdPetsBlock?.diagrams.map((d) => d.name) ?? []);
 
   /**
+   * Determine the best handles for connecting two nodes based on their positions.
+   * Chooses the side of each node that is closest to the other node.
+   * @param {{x: number, y: number}} sourcePos
+   * @param {{x: number, y: number}} targetPos
+   * @returns {{sourceHandle: string, targetHandle: string}}
+   */
+  function getBestHandles(sourcePos, targetPos) {
+    const dx = targetPos.x - sourcePos.x;
+    const dy = targetPos.y - sourcePos.y;
+
+    // Choose based on which axis has the larger difference
+    if (Math.abs(dx) > Math.abs(dy)) {
+      // Horizontal: target is left or right of source
+      if (dx > 0) {
+        return { sourceHandle: 'right-source', targetHandle: 'left-target' };
+      } else {
+        return { sourceHandle: 'left-source', targetHandle: 'right-target' };
+      }
+    } else {
+      // Vertical: target is above or below source
+      if (dy > 0) {
+        return { sourceHandle: 'bottom-source', targetHandle: 'top-target' };
+      } else {
+        return { sourceHandle: 'top-source', targetHandle: 'bottom-target' };
+      }
+    }
+  }
+
+  /**
    * Show a toast notification.
    * @param {string} message
    * @param {import('./lib/Toast.svelte').ToastType} type
@@ -76,34 +105,49 @@
     const spacingX = 300;
     const spacingY = 250;
 
-    const newNodes = tables.map((table, index) => ({
-      id: table.qualifiedName,
-      type: 'table',
-      position: {
+    // Build position map for handle calculation
+    /** @type {Map<string, {x: number, y: number}>} */
+    const positionMap = new Map();
+
+    const newNodes = tables.map((table, index) => {
+      const position = {
         x: (index % cols) * spacingX + 50,
         y: Math.floor(index / cols) * spacingY + 50,
-      },
-      data: {
-        label: table.qualifiedName,
-        columns: table.columns.map((col) => ({
-          name: col.name,
-          type: col.type,
-          isPrimaryKey: col.isPrimaryKey,
-          isForeignKey: fkColumns.has(`${table.qualifiedName}.${col.name}`),
-        })),
-      },
-    }));
+      };
+      positionMap.set(table.qualifiedName, position);
+      return {
+        id: table.qualifiedName,
+        type: 'table',
+        position,
+        data: {
+          label: table.qualifiedName,
+          columns: table.columns.map((col) => ({
+            name: col.name,
+            type: col.type,
+            isPrimaryKey: col.isPrimaryKey,
+            isForeignKey: fkColumns.has(`${table.qualifiedName}.${col.name}`),
+          })),
+        },
+      };
+    });
 
     // Create edges only for FKs where both tables exist
     const tableNames = new Set(tables.map((t) => t.qualifiedName));
     const newEdges = foreignKeys
       .filter((fk) => tableNames.has(fk.sourceTable) && tableNames.has(fk.targetTable))
-      .map((fk) => ({
-        id: `${fk.sourceTable}.${fk.sourceColumn}->${fk.targetTable}.${fk.targetColumn}`,
-        source: fk.sourceTable,
-        target: fk.targetTable,
-        type: 'default',
-      }));
+      .map((fk) => {
+        const sourcePos = positionMap.get(fk.sourceTable);
+        const targetPos = positionMap.get(fk.targetTable);
+        const handles = getBestHandles(sourcePos, targetPos);
+        return {
+          id: `${fk.sourceTable}.${fk.sourceColumn}->${fk.targetTable}.${fk.targetColumn}`,
+          source: fk.sourceTable,
+          target: fk.targetTable,
+          sourceHandle: handles.sourceHandle,
+          targetHandle: handles.targetHandle,
+          type: 'default',
+        };
+      });
 
     nodes = newNodes;
     edges = newEdges;
@@ -132,6 +176,10 @@
       foreignKeys.map((fk) => `${fk.sourceTable}.${fk.sourceColumn}`)
     );
 
+    // Build position map for handle calculation
+    /** @type {Map<string, {x: number, y: number}>} */
+    const positionMap = new Map(resolved.map((pos) => [pos.qualifiedName, { x: pos.x, y: pos.y }]));
+
     // Build nodes from resolved positions
     const tableMap = new Map(tables.map((t) => [t.qualifiedName, t]));
     const newNodes = resolved.map((pos) => {
@@ -155,12 +203,19 @@
     // Create edges only for FKs where both tables are in diagram
     const newEdges = foreignKeys
       .filter((fk) => diagramTables.has(fk.sourceTable) && diagramTables.has(fk.targetTable))
-      .map((fk) => ({
-        id: `${fk.sourceTable}.${fk.sourceColumn}->${fk.targetTable}.${fk.targetColumn}`,
-        source: fk.sourceTable,
-        target: fk.targetTable,
-        type: 'default',
-      }));
+      .map((fk) => {
+        const sourcePos = positionMap.get(fk.sourceTable);
+        const targetPos = positionMap.get(fk.targetTable);
+        const handles = getBestHandles(sourcePos, targetPos);
+        return {
+          id: `${fk.sourceTable}.${fk.sourceColumn}->${fk.targetTable}.${fk.targetColumn}`,
+          source: fk.sourceTable,
+          target: fk.targetTable,
+          sourceHandle: handles.sourceHandle,
+          targetHandle: handles.targetHandle,
+          type: 'default',
+        };
+      });
 
     nodes = newNodes;
     edges = newEdges;
@@ -172,6 +227,24 @@
    */
   function getNodePositions() {
     return new Map(nodes.map((n) => [n.id, n.position]));
+  }
+
+  /**
+   * Recalculate edge handles based on current node positions.
+   */
+  function recalculateEdgeHandles() {
+    const positionMap = getNodePositions();
+    edges = edges.map((edge) => {
+      const sourcePos = positionMap.get(edge.source);
+      const targetPos = positionMap.get(edge.target);
+      if (!sourcePos || !targetPos) return edge;
+      const handles = getBestHandles(sourcePos, targetPos);
+      return {
+        ...edge,
+        sourceHandle: handles.sourceHandle,
+        targetHandle: handles.targetHandle,
+      };
+    });
   }
 
   /**
@@ -424,6 +497,7 @@
       bind:edges
       {nodeTypes}
       fitView
+      onnodedragstop={recalculateEdgeHandles}
     >
       <Controls />
       <Background />
