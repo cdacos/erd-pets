@@ -4,7 +4,6 @@
     Controls,
     Background,
     MiniMap,
-    useSvelteFlow,
   } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
   import TableNode from './lib/TableNode.svelte';
@@ -13,7 +12,7 @@
     table: TableNode,
   };
 
-  let nodes = $state([
+  let nodes = $state.raw([
     {
       id: 'users',
       type: 'table',
@@ -41,7 +40,7 @@
     },
   ]);
 
-  let edges = $state([
+  let edges = $state.raw([
     {
       id: 'users-orgs',
       source: 'users',
