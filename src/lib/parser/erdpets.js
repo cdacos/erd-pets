@@ -318,21 +318,56 @@ export function resolveDiagram(diagram, tables, existingPositions) {
 }
 
 /**
- * Generate block content preserving wildcards, updating positions.
+ * Generate block content, expanding wildcards for the selected diagram.
  * @param {Diagram[]} diagrams
  * @param {Map<string, {x: number, y: number}>} nodePositions - Current positions from the canvas
+ * @param {string} selectedDiagram - Name of the currently selected diagram
+ * @param {Table[]} tables - All tables from the SQL file
  * @returns {string}
  */
-export function generateErdPetsContent(diagrams, nodePositions) {
+export function generateErdPetsContent(diagrams, nodePositions, selectedDiagram, tables) {
   const lines = [];
+
+  // Build schema -> tables map for wildcard expansion
+  /** @type {Map<string, string[]>} */
+  const schemaTablesMap = new Map();
+  for (const table of tables) {
+    const existing = schemaTablesMap.get(table.schema) || [];
+    existing.push(table.qualifiedName);
+    schemaTablesMap.set(table.schema, existing);
+  }
 
   for (const diagram of diagrams) {
     lines.push(`[${diagram.name}]`);
+    const isSelected = diagram.name === selectedDiagram;
+
+    // Track explicit entries to avoid duplicates when expanding wildcards
+    const explicitPatterns = new Set(
+      diagram.entries
+        .filter((e) => e.kind === 'explicit' || e.kind === 'no-position')
+        .map((e) => e.pattern)
+    );
 
     for (const entry of diagram.entries) {
       if (entry.kind === 'wildcard') {
-        // Preserve wildcards as-is
+        // Always preserve the wildcard
         lines.push(entry.pattern);
+
+        if (isSelected) {
+          // Also add explicit entries for matched tables
+          const schema = entry.pattern.slice(0, -2); // Remove ".*"
+          const schemaTables = schemaTablesMap.get(schema) || [];
+          for (const qualifiedName of schemaTables) {
+            // Skip if there's already an explicit entry for this table
+            if (explicitPatterns.has(qualifiedName)) continue;
+
+            const pos = nodePositions.get(qualifiedName);
+            if (pos) {
+              lines.push(`${qualifiedName} ${Math.round(pos.x)} ${Math.round(pos.y)}`);
+            }
+            // Don't add tables without positions - wildcard will handle them
+          }
+        }
       } else {
         // For explicit and no-position, write current position if available
         const pos = nodePositions.get(entry.pattern);

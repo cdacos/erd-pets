@@ -269,7 +269,12 @@
       // Generate updated block content
       let newContent;
       if (erdPetsBlock && erdPetsBlock.diagrams.length > 0) {
-        newContent = generateErdPetsContent(erdPetsBlock.diagrams, nodePositions);
+        newContent = generateErdPetsContent(
+          erdPetsBlock.diagrams,
+          nodePositions,
+          selectedDiagram,
+          parseResult?.tables ?? []
+        );
       } else if (parseResult && parseResult.tables.length > 0) {
         // No existing diagrams - create a new "main" diagram with all tables
         /** @type {import('./lib/parser/types.js').DiagramEntry[]} */
@@ -281,7 +286,7 @@
           line: 0,
         }));
         const newDiagram = { name: 'main', entries };
-        newContent = generateErdPetsContent([newDiagram], nodePositions);
+        newContent = generateErdPetsContent([newDiagram], nodePositions, 'main', parseResult.tables);
 
         // Update erdPetsBlock for future saves
         erdPetsBlock = {

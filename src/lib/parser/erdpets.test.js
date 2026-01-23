@@ -396,6 +396,13 @@ describe('resolveDiagram', () => {
 });
 
 describe('generateErdPetsContent', () => {
+  const tables = [
+    { qualifiedName: 'public.users', schema: 'public', name: 'users', columns: [] },
+    { qualifiedName: 'public.posts', schema: 'public', name: 'posts', columns: [] },
+    { qualifiedName: 'contract.contract', schema: 'contract', name: 'contract', columns: [] },
+    { qualifiedName: 'contract.scope', schema: 'contract', name: 'scope', columns: [] },
+  ];
+
   it('generates correct format', () => {
     const diagrams = [
       {
@@ -411,29 +418,73 @@ describe('generateErdPetsContent', () => {
       ['public.posts', { x: 350, y: 450 }],
     ]);
 
-    const result = generateErdPetsContent(diagrams, nodePositions);
+    const result = generateErdPetsContent(diagrams, nodePositions, 'main', tables);
 
     expect(result).toContain('[main]');
     expect(result).toContain('public.users 151 251'); // Rounded
     expect(result).toContain('public.posts 350 450');
   });
 
-  it('preserves wildcards', () => {
+  it('expands wildcards for selected diagram while preserving wildcard', () => {
     const diagrams = [
       {
         name: 'main',
         entries: [
           { kind: 'wildcard', pattern: 'contract.*', line: 1 },
-          { kind: 'explicit', pattern: 'public.users', x: 100, y: 200, line: 2 },
         ],
       },
     ];
-    const nodePositions = new Map([['public.users', { x: 100, y: 200 }]]);
+    const nodePositions = new Map([
+      ['contract.contract', { x: 100, y: 200 }],
+      ['contract.scope', { x: 300, y: 400 }],
+    ]);
 
-    const result = generateErdPetsContent(diagrams, nodePositions);
+    const result = generateErdPetsContent(diagrams, nodePositions, 'main', tables);
+
+    // Wildcard is preserved
+    expect(result).toContain('contract.*');
+    // Expanded entries are added with positions
+    expect(result).toContain('contract.contract 100 200');
+    expect(result).toContain('contract.scope 300 400');
+  });
+
+  it('preserves wildcards for non-selected diagrams', () => {
+    const diagrams = [
+      {
+        name: 'other',
+        entries: [
+          { kind: 'wildcard', pattern: 'contract.*', line: 1 },
+        ],
+      },
+    ];
+    const nodePositions = new Map();
+
+    const result = generateErdPetsContent(diagrams, nodePositions, 'main', tables);
 
     expect(result).toContain('contract.*');
-    expect(result).not.toContain('contract.* '); // No coordinates after wildcard
+  });
+
+  it('does not duplicate explicit entries when expanding wildcards', () => {
+    const diagrams = [
+      {
+        name: 'main',
+        entries: [
+          { kind: 'wildcard', pattern: 'contract.*', line: 1 },
+          { kind: 'explicit', pattern: 'contract.contract', x: 500, y: 600, line: 2 },
+        ],
+      },
+    ];
+    const nodePositions = new Map([
+      ['contract.contract', { x: 500, y: 600 }],
+      ['contract.scope', { x: 300, y: 400 }],
+    ]);
+
+    const result = generateErdPetsContent(diagrams, nodePositions, 'main', tables);
+
+    // contract.contract should appear only once (from explicit entry)
+    const matches = result.match(/contract\.contract/g);
+    expect(matches).toHaveLength(1);
+    expect(result).toContain('contract.scope 300 400');
   });
 
   it('preserves original positions for entries not on canvas', () => {
@@ -445,7 +496,7 @@ describe('generateErdPetsContent', () => {
     ];
     const nodePositions = new Map(); // Empty - this diagram not currently displayed
 
-    const result = generateErdPetsContent(diagrams, nodePositions);
+    const result = generateErdPetsContent(diagrams, nodePositions, 'other', []);
 
     // Should preserve original position from entry
     expect(result).toContain('public.other 100 200');
@@ -460,7 +511,7 @@ describe('generateErdPetsContent', () => {
     ];
     const nodePositions = new Map();
 
-    const result = generateErdPetsContent(diagrams, nodePositions);
+    const result = generateErdPetsContent(diagrams, nodePositions, 'other', []);
 
     expect(result).toContain('public.new');
     expect(result).not.toMatch(/public\.new \d/);
@@ -482,7 +533,7 @@ describe('generateErdPetsContent', () => {
       ['public.b', { x: 30, y: 40 }],
     ]);
 
-    const result = generateErdPetsContent(diagrams, nodePositions);
+    const result = generateErdPetsContent(diagrams, nodePositions, 'first', []);
 
     expect(result).toContain('[first]');
     expect(result).toContain('[second]');
