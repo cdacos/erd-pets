@@ -1,3 +1,26 @@
+/* @erd-pets
+[main]
+contract.contract 696 272
+contract.contract_type 284 402
+contract.scope 32 275
+contract.state_type 604 533
+contract.scope_date 275 104
+contract.date_type 571 -21
+
+[grants]
+contract.grant 595 -17
+contract.grant_capacity 805 391
+contract.grant_type 96 -47
+contract.scope_grant 299 306
+contract.scope 32 275
+
+[assets]
+asset.*
+asset.asset 708 510
+contract.manifest -67 307
+contract.manifest_asset 348 202
+*/
+
 -- DO NOT EDIT - regenerate with: ./generate-create-script.cs
 
 -- === initialise.sql ===
