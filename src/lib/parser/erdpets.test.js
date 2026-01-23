@@ -538,6 +538,28 @@ describe('generateErdPetsContent', () => {
     expect(result).toContain('[first]');
     expect(result).toContain('[second]');
   });
+
+  it('only updates positions for selected diagram when table appears in multiple diagrams', () => {
+    const diagrams = [
+      {
+        name: 'first',
+        entries: [{ kind: 'explicit', pattern: 'contract.scope', x: 100, y: 200, line: 1 }],
+      },
+      {
+        name: 'second',
+        entries: [{ kind: 'explicit', pattern: 'contract.scope', x: 500, y: 600, line: 1 }],
+      },
+    ];
+    // Canvas shows "first" diagram with scope at new position
+    const nodePositions = new Map([['contract.scope', { x: 150, y: 250 }]]);
+
+    const result = generateErdPetsContent(diagrams, nodePositions, 'first', tables);
+
+    // First diagram should use canvas position
+    expect(result).toMatch(/\[first\]\s*\ncontract\.scope 150 250/);
+    // Second diagram should preserve its original position
+    expect(result).toMatch(/\[second\]\s*\ncontract\.scope 500 600/);
+  });
 });
 
 describe('updateSqlWithErdPets', () => {

@@ -369,16 +369,26 @@ export function generateErdPetsContent(diagrams, nodePositions, selectedDiagram,
           }
         }
       } else {
-        // For explicit and no-position, write current position if available
-        const pos = nodePositions.get(entry.pattern);
-        if (pos) {
-          lines.push(`${entry.pattern} ${Math.round(pos.x)} ${Math.round(pos.y)}`);
-        } else if (entry.kind === 'explicit' && entry.x !== undefined && entry.y !== undefined) {
-          // Preserve original position for entries not currently on canvas
-          lines.push(`${entry.pattern} ${Math.round(entry.x)} ${Math.round(entry.y)}`);
+        // For explicit and no-position entries
+        if (isSelected) {
+          // Use current canvas position for the selected diagram
+          const pos = nodePositions.get(entry.pattern);
+          if (pos) {
+            lines.push(`${entry.pattern} ${Math.round(pos.x)} ${Math.round(pos.y)}`);
+          } else if (entry.kind === 'explicit' && entry.x !== undefined && entry.y !== undefined) {
+            // Preserve original position for entries not currently on canvas
+            lines.push(`${entry.pattern} ${Math.round(entry.x)} ${Math.round(entry.y)}`);
+          } else {
+            // No position available
+            lines.push(entry.pattern);
+          }
         } else {
-          // No position available
-          lines.push(entry.pattern);
+          // For non-selected diagrams, preserve original positions
+          if (entry.kind === 'explicit' && entry.x !== undefined && entry.y !== undefined) {
+            lines.push(`${entry.pattern} ${Math.round(entry.x)} ${Math.round(entry.y)}`);
+          } else {
+            lines.push(entry.pattern);
+          }
         }
       }
     }
