@@ -250,6 +250,14 @@ export function resolveDiagram(diagram, tables, existingPositions) {
         // Schema wildcard: schema.*
         const schema = entry.pattern.slice(0, -2);
         matchingTables = schemaTablesMap.get(schema) || [];
+      } else if (entry.pattern.includes('.') && entry.pattern.endsWith('*')) {
+        // Schema + table prefix wildcard: schema.prefix*
+        const dotIndex = entry.pattern.indexOf('.');
+        const schema = entry.pattern.slice(0, dotIndex);
+        const tablePrefix = entry.pattern.slice(dotIndex + 1, -1); // Remove trailing *
+        matchingTables = tables
+          .filter((t) => t.schema === schema && t.name.startsWith(tablePrefix))
+          .map((t) => t.qualifiedName);
       } else if (entry.pattern.endsWith('*')) {
         // Prefix wildcard: prefix*
         const prefix = entry.pattern.slice(0, -1);
@@ -383,6 +391,14 @@ export function generateErdPetsContent(diagrams, nodePositions, selectedDiagram,
             // Schema wildcard: schema.*
             const schema = entry.pattern.slice(0, -2);
             matchingTables = schemaTablesMap.get(schema) || [];
+          } else if (entry.pattern.includes('.') && entry.pattern.endsWith('*')) {
+            // Schema + table prefix wildcard: schema.prefix*
+            const dotIndex = entry.pattern.indexOf('.');
+            const schema = entry.pattern.slice(0, dotIndex);
+            const tablePrefix = entry.pattern.slice(dotIndex + 1, -1);
+            matchingTables = tables
+              .filter((t) => t.schema === schema && t.name.startsWith(tablePrefix))
+              .map((t) => t.qualifiedName);
           } else if (entry.pattern.endsWith('*')) {
             // Prefix wildcard: prefix*
             const prefix = entry.pattern.slice(0, -1);

@@ -1,22 +1,41 @@
 /* @erd-pets
-[main]
-contract.contract 696 272
-contract.contract_type 284 402
-contract.scope 32 275
-contract.state_type 604 533
-contract.scope_date 275 104
-contract.date_type 571 -21
+[core]
+contract.contract 853 -113
+contract.contract_type 1194 118
+contract.scope 496 160
+contract.state_type 807 390
+contract.scope_date 152 -100
+contract.date_type -135 -92
 
 [grants]
 contract.grant 595 -17
-contract.grant_capacity 805 391
-contract.grant_type 96 -47
-contract.scope_grant 299 306
-contract.scope 32 275
+contract.grant_capacity 934 -95
+contract.grant_type 928 178
+contract.scope_grant 230 68
+contract.scope -73 207
+
+[everything]
+*
+asset.asset 199 642
+contract.contract -8 312
+contract.contract_type 630 566
+contract.date_type 396 833
+contract.grant 324 195
+contract.grant_capacity 546 88
+contract.grant_type 1142 143
+contract.manifest -35 52
+contract.manifest_asset 886 717
+contract.region 659 813
+contract.scope -5 736
+contract.scope_date 797 244
+contract.scope_grant -302 399
+contract.scope_manifest 318 -122
+contract.scope_region 787 -74
+contract.state_type 1057 463
 
 [assets]
 asset.*
-asset.asset 708 510
+asset.asset 738 280
 contract.manifest -67 307
 contract.manifest_asset 348 202
 */

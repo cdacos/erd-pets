@@ -176,6 +176,21 @@ con*
     });
   });
 
+  it('parses schema + table prefix wildcard entry', () => {
+    const content = `
+[main]
+contract.sco*
+`;
+
+    const result = parseErdPetsContent(content, 1);
+
+    expect(result.diagrams[0].entries).toHaveLength(1);
+    expect(result.diagrams[0].entries[0]).toMatchObject({
+      kind: 'wildcard',
+      pattern: 'contract.sco*',
+    });
+  });
+
   it('parses no-position entries', () => {
     const content = `
 [main]
@@ -467,6 +482,37 @@ describe('resolveDiagram', () => {
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0].message).toContain('No tables found matching pattern "xyz*"');
   });
+
+  it('expands schema + table prefix wildcard', () => {
+    const diagram = {
+      name: 'main',
+      entries: [{ kind: 'wildcard', pattern: 'contract.sco*', line: 1 }],
+    };
+
+    const result = resolveDiagram(diagram, tables);
+
+    expect(result.resolved).toHaveLength(1);
+    expect(result.resolved[0].qualifiedName).toBe('contract.scope');
+  });
+
+  it('expands schema + table prefix wildcard to multiple tables', () => {
+    const extendedTables = [
+      ...tables,
+      { qualifiedName: 'public.user_roles', schema: 'public', name: 'user_roles', columns: [] },
+    ];
+    const diagram = {
+      name: 'main',
+      entries: [{ kind: 'wildcard', pattern: 'public.user*', line: 1 }],
+    };
+
+    const result = resolveDiagram(diagram, extendedTables);
+
+    expect(result.resolved).toHaveLength(2);
+    const names = result.resolved.map((r) => r.qualifiedName);
+    expect(names).toContain('public.users');
+    expect(names).toContain('public.user_roles');
+    expect(names).not.toContain('public.posts');
+  });
 });
 
 describe('generateErdPetsContent', () => {
@@ -564,6 +610,23 @@ describe('generateErdPetsContent', () => {
     expect(result).toContain('contract.scope 300 400');
     // Should not include public tables
     expect(result).not.toContain('public.users');
+  });
+
+  it('expands schema + table prefix wildcard for selected diagram', () => {
+    const diagrams = [
+      {
+        name: 'main',
+        entries: [{ kind: 'wildcard', pattern: 'contract.sco*', line: 1 }],
+      },
+    ];
+    const nodePositions = new Map([['contract.scope', { x: 100, y: 200 }]]);
+
+    const result = generateErdPetsContent(diagrams, nodePositions, 'main', tables);
+
+    expect(result).toContain('contract.sco*');
+    expect(result).toContain('contract.scope 100 200');
+    // Should not include contract.contract (doesn't match sco*)
+    expect(result).not.toContain('contract.contract');
   });
 
   it('preserves wildcards for non-selected diagrams', () => {
