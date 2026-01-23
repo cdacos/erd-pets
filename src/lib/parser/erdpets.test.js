@@ -436,20 +436,34 @@ describe('generateErdPetsContent', () => {
     expect(result).not.toContain('contract.* '); // No coordinates after wildcard
   });
 
-  it('handles missing node positions gracefully', () => {
+  it('preserves original positions for entries not on canvas', () => {
     const diagrams = [
       {
         name: 'main',
-        entries: [{ kind: 'explicit', pattern: 'public.deleted', x: 100, y: 200, line: 1 }],
+        entries: [{ kind: 'explicit', pattern: 'public.other', x: 100, y: 200, line: 1 }],
+      },
+    ];
+    const nodePositions = new Map(); // Empty - this diagram not currently displayed
+
+    const result = generateErdPetsContent(diagrams, nodePositions);
+
+    // Should preserve original position from entry
+    expect(result).toContain('public.other 100 200');
+  });
+
+  it('writes no-position entries without coordinates when not on canvas', () => {
+    const diagrams = [
+      {
+        name: 'main',
+        entries: [{ kind: 'no-position', pattern: 'public.new', line: 1 }],
       },
     ];
     const nodePositions = new Map();
 
     const result = generateErdPetsContent(diagrams, nodePositions);
 
-    // Should write pattern without coordinates
-    expect(result).toContain('public.deleted');
-    expect(result).not.toContain('public.deleted 100');
+    expect(result).toContain('public.new');
+    expect(result).not.toMatch(/public\.new \d/);
   });
 
   it('handles multiple diagrams', () => {

@@ -334,12 +334,15 @@ export function generateErdPetsContent(diagrams, nodePositions) {
         // Preserve wildcards as-is
         lines.push(entry.pattern);
       } else {
-        // For explicit and no-position, write current position
+        // For explicit and no-position, write current position if available
         const pos = nodePositions.get(entry.pattern);
         if (pos) {
           lines.push(`${entry.pattern} ${Math.round(pos.x)} ${Math.round(pos.y)}`);
+        } else if (entry.kind === 'explicit' && entry.x !== undefined && entry.y !== undefined) {
+          // Preserve original position for entries not currently on canvas
+          lines.push(`${entry.pattern} ${Math.round(entry.x)} ${Math.round(entry.y)}`);
         } else {
-          // Table might have been removed; write without position
+          // No position available
           lines.push(entry.pattern);
         }
       }
