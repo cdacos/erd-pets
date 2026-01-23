@@ -146,6 +146,36 @@ contract.*
     });
   });
 
+  it('parses global wildcard entry', () => {
+    const content = `
+[main]
+*
+`;
+
+    const result = parseErdPetsContent(content, 1);
+
+    expect(result.diagrams[0].entries).toHaveLength(1);
+    expect(result.diagrams[0].entries[0]).toMatchObject({
+      kind: 'wildcard',
+      pattern: '*',
+    });
+  });
+
+  it('parses prefix wildcard entry', () => {
+    const content = `
+[main]
+con*
+`;
+
+    const result = parseErdPetsContent(content, 1);
+
+    expect(result.diagrams[0].entries).toHaveLength(1);
+    expect(result.diagrams[0].entries[0]).toMatchObject({
+      kind: 'wildcard',
+      pattern: 'con*',
+    });
+  });
+
   it('parses no-position entries', () => {
     const content = `
 [main]
@@ -393,6 +423,50 @@ describe('resolveDiagram', () => {
     expect(typeof result.resolved[0].x).toBe('number');
     expect(typeof result.resolved[0].y).toBe('number');
   });
+
+  it('expands global wildcard to all tables', () => {
+    const diagram = {
+      name: 'main',
+      entries: [{ kind: 'wildcard', pattern: '*', line: 1 }],
+    };
+
+    const result = resolveDiagram(diagram, tables);
+
+    expect(result.resolved).toHaveLength(4);
+    const names = result.resolved.map((r) => r.qualifiedName);
+    expect(names).toContain('public.users');
+    expect(names).toContain('public.posts');
+    expect(names).toContain('contract.contract');
+    expect(names).toContain('contract.scope');
+  });
+
+  it('expands prefix wildcard to matching tables', () => {
+    const diagram = {
+      name: 'main',
+      entries: [{ kind: 'wildcard', pattern: 'con*', line: 1 }],
+    };
+
+    const result = resolveDiagram(diagram, tables);
+
+    expect(result.resolved).toHaveLength(2);
+    const names = result.resolved.map((r) => r.qualifiedName);
+    expect(names).toContain('contract.contract');
+    expect(names).toContain('contract.scope');
+    expect(names).not.toContain('public.users');
+  });
+
+  it('reports no matches for prefix wildcard', () => {
+    const diagram = {
+      name: 'main',
+      entries: [{ kind: 'wildcard', pattern: 'xyz*', line: 5 }],
+    };
+
+    const result = resolveDiagram(diagram, tables);
+
+    expect(result.resolved).toHaveLength(0);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].message).toContain('No tables found matching pattern "xyz*"');
+  });
 });
 
 describe('generateErdPetsContent', () => {
@@ -446,6 +520,50 @@ describe('generateErdPetsContent', () => {
     // Expanded entries are added with positions
     expect(result).toContain('contract.contract 100 200');
     expect(result).toContain('contract.scope 300 400');
+  });
+
+  it('expands global wildcard for selected diagram', () => {
+    const diagrams = [
+      {
+        name: 'main',
+        entries: [{ kind: 'wildcard', pattern: '*', line: 1 }],
+      },
+    ];
+    const nodePositions = new Map([
+      ['public.users', { x: 100, y: 200 }],
+      ['public.posts', { x: 300, y: 400 }],
+      ['contract.contract', { x: 500, y: 600 }],
+      ['contract.scope', { x: 700, y: 800 }],
+    ]);
+
+    const result = generateErdPetsContent(diagrams, nodePositions, 'main', tables);
+
+    expect(result).toContain('*');
+    expect(result).toContain('public.users 100 200');
+    expect(result).toContain('public.posts 300 400');
+    expect(result).toContain('contract.contract 500 600');
+    expect(result).toContain('contract.scope 700 800');
+  });
+
+  it('expands prefix wildcard for selected diagram', () => {
+    const diagrams = [
+      {
+        name: 'main',
+        entries: [{ kind: 'wildcard', pattern: 'con*', line: 1 }],
+      },
+    ];
+    const nodePositions = new Map([
+      ['contract.contract', { x: 100, y: 200 }],
+      ['contract.scope', { x: 300, y: 400 }],
+    ]);
+
+    const result = generateErdPetsContent(diagrams, nodePositions, 'main', tables);
+
+    expect(result).toContain('con*');
+    expect(result).toContain('contract.contract 100 200');
+    expect(result).toContain('contract.scope 300 400');
+    // Should not include public tables
+    expect(result).not.toContain('public.users');
   });
 
   it('preserves wildcards for non-selected diagrams', () => {

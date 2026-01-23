@@ -88,10 +88,12 @@ export function parseErdPetsContent(content, startLine = 1) {
 
     const pattern = parts[0];
 
-    // Validate pattern format
-    if (!pattern.includes('.')) {
+    // Validate pattern format (allow: *, prefix*, schema.*, schema.table)
+    const isGlobalWildcard = pattern === '*';
+    const isPrefixWildcard = pattern.endsWith('*') && !pattern.includes('.');
+    if (!isGlobalWildcard && !isPrefixWildcard && !pattern.includes('.')) {
       errors.push({
-        message: `Invalid pattern "${pattern}": must be schema.table or schema.*`,
+        message: `Invalid pattern "${pattern}": must be schema.table, schema.*, prefix*, or *`,
         line: lineNum,
       });
       continue;
@@ -119,7 +121,8 @@ export function parseErdPetsContent(content, startLine = 1) {
     entriesInCurrentDiagram.set(pattern, lineNum);
 
     // Determine entry kind
-    const isWildcard = pattern.endsWith('.*');
+    // Wildcards: *, prefix*, schema.*
+    const isWildcard = pattern === '*' || pattern.endsWith('*');
 
     if (parts.length >= 3) {
       // Explicit position: schema.table x y
@@ -236,19 +239,34 @@ export function resolveDiagram(diagram, tables, existingPositions) {
   // Process entries in order
   for (const entry of diagram.entries) {
     if (entry.kind === 'wildcard') {
-      // Expand wildcard
-      const schema = entry.pattern.slice(0, -2); // Remove ".*"
-      const schemaTables = schemaTablesMap.get(schema) || [];
+      // Determine which tables match this wildcard
+      /** @type {string[]} */
+      let matchingTables = [];
 
-      if (schemaTables.length === 0) {
+      if (entry.pattern === '*') {
+        // Global wildcard: all tables
+        matchingTables = tables.map((t) => t.qualifiedName);
+      } else if (entry.pattern.endsWith('.*')) {
+        // Schema wildcard: schema.*
+        const schema = entry.pattern.slice(0, -2);
+        matchingTables = schemaTablesMap.get(schema) || [];
+      } else if (entry.pattern.endsWith('*')) {
+        // Prefix wildcard: prefix*
+        const prefix = entry.pattern.slice(0, -1);
+        matchingTables = tables
+          .filter((t) => t.qualifiedName.startsWith(prefix))
+          .map((t) => t.qualifiedName);
+      }
+
+      if (matchingTables.length === 0) {
         errors.push({
-          message: `No tables found for schema "${schema}"`,
+          message: `No tables found matching pattern "${entry.pattern}"`,
           line: entry.line,
         });
         continue;
       }
 
-      for (const qualifiedName of schemaTables) {
+      for (const qualifiedName of matchingTables) {
         // Skip if already added or if there's an explicit entry for this table
         if (addedTables.has(qualifiedName) || explicitTables.has(qualifiedName)) {
           continue;
@@ -354,10 +372,27 @@ export function generateErdPetsContent(diagrams, nodePositions, selectedDiagram,
         lines.push(entry.pattern);
 
         if (isSelected) {
-          // Also add explicit entries for matched tables
-          const schema = entry.pattern.slice(0, -2); // Remove ".*"
-          const schemaTables = schemaTablesMap.get(schema) || [];
-          for (const qualifiedName of schemaTables) {
+          // Determine which tables match this wildcard
+          /** @type {string[]} */
+          let matchingTables = [];
+
+          if (entry.pattern === '*') {
+            // Global wildcard: all tables
+            matchingTables = tables.map((t) => t.qualifiedName);
+          } else if (entry.pattern.endsWith('.*')) {
+            // Schema wildcard: schema.*
+            const schema = entry.pattern.slice(0, -2);
+            matchingTables = schemaTablesMap.get(schema) || [];
+          } else if (entry.pattern.endsWith('*')) {
+            // Prefix wildcard: prefix*
+            const prefix = entry.pattern.slice(0, -1);
+            matchingTables = tables
+              .filter((t) => t.qualifiedName.startsWith(prefix))
+              .map((t) => t.qualifiedName);
+          }
+
+          // Add explicit entries for matched tables
+          for (const qualifiedName of matchingTables) {
             // Skip if there's already an explicit entry for this table
             if (explicitPatterns.has(qualifiedName)) continue;
 
