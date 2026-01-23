@@ -40,6 +40,36 @@
  */
 
 /**
+ * @typedef {Object} DiagramEntry
+ * @property {'explicit' | 'wildcard' | 'no-position'} kind
+ * @property {string} pattern - "schema.table" or "schema.*"
+ * @property {number} [x]
+ * @property {number} [y]
+ * @property {number} line - Source line for errors
+ */
+
+/**
+ * @typedef {Object} Diagram
+ * @property {string} name
+ * @property {DiagramEntry[]} entries
+ */
+
+/**
+ * @typedef {Object} ErdPetsBlock
+ * @property {Diagram[]} diagrams
+ * @property {ParseError[]} errors
+ * @property {number} startOffset - For replacement
+ * @property {number} endOffset
+ */
+
+/**
+ * @typedef {Object} ResolvedPosition
+ * @property {string} qualifiedName - "schema.table"
+ * @property {number} x
+ * @property {number} y
+ */
+
+/**
  * @typedef {Object} Token
  * @property {TokenType} type
  * @property {string} value
