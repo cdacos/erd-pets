@@ -379,6 +379,28 @@
       showToast(err.message || 'Failed to refresh file.', 'error');
     }
   }
+
+  // Keyboard shortcuts
+  $effect(() => {
+    /**
+     * @param {KeyboardEvent} e
+     */
+    function handleKeydown(e) {
+      const isMod = e.metaKey || e.ctrlKey;
+      if (!isMod) return;
+
+      if (e.key === 's') {
+        e.preventDefault();
+        handleSave();
+      } else if (e.key === 'o') {
+        e.preventDefault();
+        handleLoad();
+      }
+    }
+
+    window.addEventListener('keydown', handleKeydown);
+    return () => window.removeEventListener('keydown', handleKeydown);
+  });
 </script>
 
 <div class="app">
