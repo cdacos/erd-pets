@@ -738,8 +738,11 @@
         return;
       }
 
+      // Get current background color from CSS variable
+      const bgColor = getComputedStyle(document.documentElement).getPropertyValue('--color-bg').trim();
+
       const canvas = await toCanvas(viewportElement, {
-        backgroundColor: '#fafafa',
+        backgroundColor: bgColor,
         pixelRatio,
         width: imageWidth,
         height: imageHeight,
@@ -845,6 +848,6 @@
 
   main {
     flex: 1;
-    background: #fafafa;
+    background: var(--color-bg);
   }
 </style>

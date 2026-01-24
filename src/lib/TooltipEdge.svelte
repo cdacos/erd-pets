@@ -118,13 +118,13 @@
   }
 
   .tooltip {
-    background: #1f2937;
-    color: white;
+    background: var(--color-tooltip-bg);
+    color: var(--color-tooltip-text);
     padding: 8px 12px;
     border-radius: 6px;
     font-family: system-ui, sans-serif;
     font-size: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--shadow-md);
     width: fit-content;
     white-space: nowrap;
   }
@@ -139,12 +139,12 @@
   }
 
   .label {
-    color: #9ca3af;
+    color: var(--color-tooltip-label);
     font-weight: 500;
   }
 
   .value {
-    color: #f3f4f6;
+    color: var(--color-tooltip-value);
     font-family: ui-monospace, monospace;
   }
 </style>

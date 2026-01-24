@@ -1,4 +1,6 @@
 <script>
+  import ThemeSelector from './ThemeSelector.svelte';
+
   /**
    * @typedef {import('./parser/types.js').DiagramDefinition} DiagramDefinition
    * @typedef {'circular'} LayoutType
@@ -109,6 +111,7 @@
       <option value="">No diagrams</option>
     {/if}
   </select>
+  <ThemeSelector />
 </header>
 
 <style>
@@ -116,22 +119,23 @@
     display: flex;
     gap: 8px;
     padding: 8px 12px;
-    background: #f9fafb;
-    border-bottom: 1px solid #e5e7eb;
+    background: var(--color-surface-alt);
+    border-bottom: 1px solid var(--color-border);
     align-items: center;
   }
 
   header button {
-    background: white;
-    border: 1px solid #d1d5db;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-strong);
     border-radius: 4px;
     padding: 6px 12px;
     cursor: pointer;
     font-size: 13px;
+    color: var(--color-text-primary);
   }
 
   header button:hover:not(:disabled) {
-    background: #f3f4f6;
+    background: var(--color-surface-hover);
   }
 
   header button:disabled {
@@ -141,10 +145,11 @@
 
   header select {
     padding: 6px 12px;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--color-border-strong);
     border-radius: 4px;
     font-size: 13px;
-    background: white;
+    background: var(--color-surface);
+    color: var(--color-text-primary);
   }
 
   .file-names {
@@ -153,17 +158,17 @@
     align-items: center;
     gap: 6px;
     font-size: 13px;
-    color: #6b7280;
+    color: var(--color-text-secondary);
   }
 
   .file-name {
     font-family: ui-monospace, monospace;
-    background: #f3f4f6;
+    background: var(--color-surface-hover);
     padding: 4px 8px;
     border-radius: 4px;
   }
 
   .separator {
-    color: #9ca3af;
+    color: var(--color-text-muted);
   }
 </style>

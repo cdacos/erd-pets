@@ -69,18 +69,18 @@
   }
 
   .table-node {
-    background: white;
-    border: 2px solid #374151;
+    background: var(--color-surface);
+    border: 2px solid var(--color-table-border);
     border-radius: 4px;
     min-width: 150px;
     font-family: system-ui, sans-serif;
     font-size: 12px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-sm);
   }
 
   .table-header {
-    background: #374151;
-    color: white;
+    background: var(--color-table-header-bg);
+    color: var(--color-table-header-text);
     padding: 6px 10px;
     font-weight: 600;
     border-radius: 2px 2px 0 0;
@@ -98,15 +98,15 @@
   }
 
   .column:hover {
-    background: #f3f4f6;
+    background: var(--color-surface-hover);
   }
 
   .column-name {
-    color: #1f2937;
+    color: var(--color-text-primary);
   }
 
   .column-type {
-    color: #6b7280;
+    color: var(--color-text-secondary);
   }
 
   .pk, .fk {
@@ -118,12 +118,12 @@
   }
 
   .pk {
-    background: #fbbf24;
-    color: #78350f;
+    background: var(--color-pk-bg);
+    color: var(--color-pk-text);
   }
 
   .fk {
-    background: #60a5fa;
-    color: #1e3a8a;
+    background: var(--color-fk-bg);
+    color: var(--color-fk-text);
   }
 </style>

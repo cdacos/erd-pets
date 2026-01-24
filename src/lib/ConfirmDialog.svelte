@@ -75,25 +75,25 @@
   }
 
   .dialog {
-    background: white;
+    background: var(--color-surface);
     border-radius: 8px;
     padding: 24px;
     max-width: 400px;
     width: 90%;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--shadow-lg);
   }
 
   h2 {
     margin: 0 0 12px 0;
     font-size: 18px;
     font-weight: 600;
-    color: #111827;
+    color: var(--color-text-heading);
   }
 
   p {
     margin: 0 0 20px 0;
     font-size: 14px;
-    color: #6b7280;
+    color: var(--color-text-secondary);
     line-height: 1.5;
   }
 
@@ -112,21 +112,21 @@
   }
 
   .cancel {
-    background: white;
-    border-color: #d1d5db;
-    color: #374151;
+    background: var(--color-surface);
+    border-color: var(--color-border-strong);
+    color: var(--color-text-primary);
   }
 
   .cancel:hover {
-    background: #f3f4f6;
+    background: var(--color-surface-hover);
   }
 
   .confirm {
-    background: #3b82f6;
+    background: var(--color-accent);
     color: white;
   }
 
   .confirm:hover {
-    background: #2563eb;
+    background: var(--color-accent-hover);
   }
 </style>
