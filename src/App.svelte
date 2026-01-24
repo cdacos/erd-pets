@@ -12,6 +12,7 @@
   import Toast from './lib/Toast.svelte';
   import DiagramToolbar from './lib/DiagramToolbar.svelte';
   import ConfirmDialog from './lib/ConfirmDialog.svelte';
+  import TableListPanel from './lib/TableListPanel.svelte';
   import { circularLayout } from './lib/layouts/circular.js';
   import {
     openDiagramFile,
@@ -28,6 +29,7 @@
     serializeDiagramFile,
     createDefaultDiagramFile,
     resolveRelation,
+    setTableVisibility,
   } from './lib/parser/diagram.js';
 
   const nodeTypes = {
@@ -82,6 +84,11 @@
 
   /** @type {import('./lib/DiagramToolbar.svelte').EdgeStyle} */
   let edgeStyle = $state('rounded');
+
+  let showTableList = $state(false);
+
+  /** @type {Set<string>} */
+  let visibleTableNames = $derived(new Set(nodes.map((n) => n.id)));
 
   /**
    * Determine the best handles for connecting two nodes based on their positions.
@@ -140,9 +147,26 @@
   function showToast(message, type = 'info') {
     const id = ++toastId;
     toasts = [...toasts, { id, message, type }];
-    setTimeout(() => {
-      toasts = toasts.filter((t) => t.id !== id);
-    }, 5000);
+
+    // Errors persist until dismissed; others auto-dismiss
+    if (type !== 'error') {
+      setTimeout(() => {
+        toasts = toasts.filter((t) => t.id !== id);
+      }, 5000);
+    }
+
+    // Echo to console for debugging
+    if (type === 'error') {
+      console.error('[erd-pets]', message);
+    }
+  }
+
+  /**
+   * Dismiss a toast by id.
+   * @param {number} id
+   */
+  function dismissToast(id) {
+    toasts = toasts.filter((t) => t.id !== id);
   }
 
   /**
@@ -667,6 +691,35 @@
   }
 
   /**
+   * Handle table visibility toggle from the side panel.
+   * @param {string} qualifiedName
+   * @param {boolean} visible
+   */
+  function handleTableVisibilityToggle(qualifiedName, visible) {
+    if (!diagramFile || !selectedDiagramId || !parseResult) return;
+
+    const diagramIndex = diagramFile.diagrams.findIndex((d) => d.id === selectedDiagramId);
+    if (diagramIndex === -1) return;
+
+    const diagram = diagramFile.diagrams[diagramIndex];
+    const updatedTables = setTableVisibility(diagram.tables, qualifiedName, visible);
+
+    // Update diagram file with new tables array
+    const updatedDiagrams = [...diagramFile.diagrams];
+    updatedDiagrams[diagramIndex] = { ...diagram, tables: updatedTables };
+    diagramFile = { ...diagramFile, diagrams: updatedDiagrams };
+
+    // Preserve current positions and re-render
+    const existingPositions = getNodePositions();
+    convertToFlowWithDiagram(
+      updatedDiagrams[diagramIndex],
+      parseResult.tables,
+      parseResult.foreignKeys,
+      existingPositions
+    );
+  }
+
+  /**
    * Get bounds of all nodes in flow coordinates, using actual rendered dimensions.
    * @returns {{ x: number, y: number, width: number, height: number } | null}
    */
@@ -808,24 +861,35 @@
     {diagramFileName}
     {sqlFileName}
     {edgeStyle}
+    {showTableList}
+    onToggleTableList={() => showTableList = !showTableList}
   />
 
-  <main>
-    <SvelteFlow
-      bind:nodes
-      bind:edges
-      {nodeTypes}
-      {edgeTypes}
-      fitView
-      onnodedragstop={recalculateEdgeHandles}
-    >
-      <Controls />
-      <MiniMap />
-    </SvelteFlow>
-  </main>
+  <div class="main-area">
+    {#if showTableList}
+      <TableListPanel
+        tables={parseResult?.tables ?? []}
+        visibleTables={visibleTableNames}
+        onToggle={handleTableVisibilityToggle}
+      />
+    {/if}
+    <main>
+      <SvelteFlow
+        bind:nodes
+        bind:edges
+        {nodeTypes}
+        {edgeTypes}
+        fitView
+        onnodedragstop={recalculateEdgeHandles}
+      >
+        <Controls />
+        <MiniMap />
+      </SvelteFlow>
+    </main>
+  </div>
 </div>
 
-<Toast {toasts} />
+<Toast {toasts} onDismiss={dismissToast} />
 
 <ConfirmDialog
   open={showLayoutConfirm}
@@ -842,6 +906,12 @@
     height: 100vh;
     display: flex;
     flex-direction: column;
+  }
+
+  .main-area {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
   }
 
   main {

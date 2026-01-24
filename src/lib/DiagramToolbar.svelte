@@ -7,7 +7,7 @@
    * @typedef {'rounded' | 'bezier'} EdgeStyle
    */
 
-  /** @type {{ onNew: () => void, onLoad: () => void, onRefresh: () => void, onSave: () => void, onDiagramChange: (id: string) => void, onLayout: (type: LayoutType) => void, onEdgeStyleChange: (style: EdgeStyle) => void, onExport: (pixelRatio: number) => void, diagrams: DiagramDefinition[], selectedDiagramId: string, fileLoaded: boolean, diagramFileName: string, sqlFileName: string, edgeStyle: EdgeStyle }} */
+  /** @type {{ onNew: () => void, onLoad: () => void, onRefresh: () => void, onSave: () => void, onDiagramChange: (id: string) => void, onLayout: (type: LayoutType) => void, onEdgeStyleChange: (style: EdgeStyle) => void, onExport: (pixelRatio: number) => void, diagrams: DiagramDefinition[], selectedDiagramId: string, fileLoaded: boolean, diagramFileName: string, sqlFileName: string, edgeStyle: EdgeStyle, showTableList: boolean, onToggleTableList: () => void }} */
   let {
     onNew,
     onLoad,
@@ -23,6 +23,8 @@
     diagramFileName = '',
     sqlFileName = '',
     edgeStyle = 'rounded',
+    showTableList = false,
+    onToggleTableList,
   } = $props();
 
   /** @type {LayoutType[]} */
@@ -62,6 +64,17 @@
 </script>
 
 <header>
+  <button
+    class="toggle-list-btn"
+    class:active={showTableList}
+    onclick={onToggleTableList}
+    title="Toggle table list"
+    disabled={!fileLoaded}
+  >
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+  </button>
   <button onclick={onNew}>New</button>
   <button onclick={onLoad}>Open</button>
   <button onclick={onRefresh} disabled={!fileLoaded}>Refresh</button>
@@ -141,6 +154,22 @@
   header button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .toggle-list-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 8px;
+  }
+
+  .toggle-list-btn.active {
+    background: var(--color-surface-hover);
+    border-color: var(--color-primary);
+  }
+
+  .toggle-list-btn svg {
+    display: block;
   }
 
   header select {

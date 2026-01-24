@@ -469,15 +469,6 @@ export function resolveDiagramTables(diagram, tables, existingPositions) {
 }
 
 /**
- * Serialize a diagram file back to JSONC.
- * Preserves wildcards and updates positions for the selected diagram.
- * @param {DiagramFile} diagramFile
- * @param {string} selectedDiagramId
- * @param {Map<string, {x: number, y: number}>} nodePositions - Current positions from canvas
- * @param {Table[]} tables - All tables from SQL
- * @returns {string}
- */
-/**
  * Create a default diagram file structure for a new SQL schema.
  * @param {string} sqlFilename - The filename of the SQL file (just the name, not full path)
  * @returns {DiagramFile}
@@ -554,6 +545,61 @@ export function resolveRelation(fk, relations) {
   return { hidden: false };
 }
 
+/**
+ * Set visibility for a table in a diagram.
+ * Returns updated tables array for the diagram.
+ * @param {DiagramTableEntry[]} tables - Current diagram tables array
+ * @param {string} qualifiedName - The table's qualified name
+ * @param {boolean} visible - Whether to show or hide the table
+ * @returns {DiagramTableEntry[]}
+ */
+export function setTableVisibility(tables, qualifiedName, visible) {
+  // Find existing explicit entry for this table
+  const existingIndex = tables.findIndex(
+    (t) => t.name === qualifiedName && !isWildcard(t.name)
+  );
+
+  if (visible) {
+    // Showing a table
+    if (existingIndex !== -1) {
+      const existing = tables[existingIndex];
+      if (existing.visible === false) {
+        // Remove the visible: false property
+        const { visible: _removed, ...rest } = existing;
+        // If only name remains and no other properties, we could remove entirely
+        // But keep entry to preserve position if it has x/y
+        const newTables = [...tables];
+        newTables[existingIndex] = rest;
+        return newTables;
+      }
+      // Already visible, no change needed
+      return tables;
+    }
+    // No explicit entry - table might be hidden by wildcard
+    // Add explicit entry to show it (will be placed by canvas)
+    return [...tables, { name: qualifiedName }];
+  } else {
+    // Hiding a table
+    if (existingIndex !== -1) {
+      // Update existing entry with visible: false
+      const newTables = [...tables];
+      newTables[existingIndex] = { ...tables[existingIndex], visible: false };
+      return newTables;
+    }
+    // No explicit entry - add one with visible: false
+    return [...tables, { name: qualifiedName, visible: false }];
+  }
+}
+
+/**
+ * Serialize a diagram file back to JSONC.
+ * Preserves wildcards and updates positions for the selected diagram.
+ * @param {DiagramFile} diagramFile
+ * @param {string} selectedDiagramId
+ * @param {Map<string, {x: number, y: number}>} nodePositions - Current positions from canvas
+ * @param {Table[]} tables - All tables from SQL
+ * @returns {string}
+ */
 export function serializeDiagramFile(diagramFile, selectedDiagramId, nodePositions, tables) {
   // Deep clone to avoid mutating the original
   const output = {

@@ -4,14 +4,19 @@
    * @typedef {{ id: number, message: string, type: ToastType }} Toast
    */
 
-  /** @type {{ toasts: Toast[] }} */
-  let { toasts = [] } = $props();
+  /** @type {{ toasts: Toast[], onDismiss?: (id: number) => void }} */
+  let { toasts = [], onDismiss } = $props();
 </script>
 
 <div class="toast-container">
   {#each toasts as toast (toast.id)}
     <div class="toast toast-{toast.type}">
-      {toast.message}
+      <span class="toast-message">{toast.message}</span>
+      {#if toast.type === 'error' && onDismiss}
+        <button class="toast-dismiss" onclick={() => onDismiss(toast.id)} aria-label="Dismiss">
+          &times;
+        </button>
+      {/if}
     </div>
   {/each}
 </div>
@@ -29,11 +34,34 @@
   }
 
   .toast {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
     padding: 12px 16px;
     border-radius: 6px;
     font-size: 14px;
     box-shadow: var(--shadow-md);
     animation: slideIn 0.2s ease-out;
+  }
+
+  .toast-message {
+    flex: 1;
+  }
+
+  .toast-dismiss {
+    background: none;
+    border: none;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.7;
+    color: inherit;
+    padding: 0;
+    margin: -2px -4px 0 0;
+  }
+
+  .toast-dismiss:hover {
+    opacity: 1;
   }
 
   .toast-error {
