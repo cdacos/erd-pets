@@ -10,6 +10,8 @@
   import TableNode from './lib/TableNode.svelte';
   import Toast from './lib/Toast.svelte';
   import DiagramToolbar from './lib/DiagramToolbar.svelte';
+  import ConfirmDialog from './lib/ConfirmDialog.svelte';
+  import { circularLayout } from './lib/layouts/circular.js';
   import {
     openDiagramFile,
     openSqlFile,
@@ -66,6 +68,11 @@
   let parseResult = $state(null);
 
   let diagrams = $derived(diagramFile?.diagrams ?? []);
+
+  /** @type {import('./lib/DiagramToolbar.svelte').LayoutType | null} */
+  let pendingLayout = $state(null);
+
+  let showLayoutConfirm = $state(false);
 
   /**
    * Determine the best handles for connecting two nodes based on their positions.
@@ -537,6 +544,65 @@
     }
   }
 
+  /**
+   * Handle layout button click from toolbar.
+   * Shows confirmation dialog before applying.
+   * @param {import('./lib/DiagramToolbar.svelte').LayoutType} layoutType
+   */
+  function handleLayoutRequest(layoutType) {
+    if (nodes.length === 0) {
+      showToast('No tables to layout.', 'error');
+      return;
+    }
+    pendingLayout = layoutType;
+    showLayoutConfirm = true;
+  }
+
+  /**
+   * Apply the pending layout after user confirmation.
+   */
+  function applyLayout() {
+    if (!pendingLayout) return;
+
+    /** @type {Map<string, {x: number, y: number}>} */
+    let newPositions;
+
+    switch (pendingLayout) {
+      case 'circular':
+        newPositions = circularLayout(nodes);
+        break;
+      default:
+        showToast(`Unknown layout: ${pendingLayout}`, 'error');
+        showLayoutConfirm = false;
+        pendingLayout = null;
+        return;
+    }
+
+    // Apply new positions to nodes
+    nodes = nodes.map((node) => {
+      const newPos = newPositions.get(node.id);
+      if (newPos) {
+        return { ...node, position: newPos };
+      }
+      return node;
+    });
+
+    // Recalculate edge handles for new positions
+    recalculateEdgeHandles();
+
+    showToast(`Applied ${pendingLayout} layout.`, 'success');
+    showLayoutConfirm = false;
+    pendingLayout = null;
+  }
+
+  /**
+   * Cancel layout confirmation.
+   */
+  function cancelLayout() {
+    showLayoutConfirm = false;
+    pendingLayout = null;
+  }
+
   // Keyboard shortcuts
   $effect(() => {
     /**
@@ -570,6 +636,7 @@
     onRefresh={handleRefresh}
     onSave={handleSave}
     onDiagramChange={handleDiagramChange}
+    onLayout={handleLayoutRequest}
     {diagrams}
     selectedDiagramId={selectedDiagramId}
     fileLoaded={!!diagramHandle}
@@ -593,6 +660,15 @@
 </div>
 
 <Toast {toasts} />
+
+<ConfirmDialog
+  open={showLayoutConfirm}
+  title="Apply Layout"
+  message="Your current layout will be replaced. This action cannot be undone."
+  confirmLabel="Apply"
+  onConfirm={applyLayout}
+  onCancel={cancelLayout}
+/>
 
 <style>
   .app {

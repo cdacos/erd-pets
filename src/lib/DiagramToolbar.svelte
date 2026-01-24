@@ -1,21 +1,42 @@
 <script>
   /**
    * @typedef {import('./parser/types.js').DiagramDefinition} DiagramDefinition
+   * @typedef {'circular'} LayoutType
    */
 
-  /** @type {{ onNew: () => void, onLoad: () => void, onRefresh: () => void, onSave: () => void, onDiagramChange: (id: string) => void, diagrams: DiagramDefinition[], selectedDiagramId: string, fileLoaded: boolean, diagramFileName: string, sqlFileName: string }} */
+  /** @type {{ onNew: () => void, onLoad: () => void, onRefresh: () => void, onSave: () => void, onDiagramChange: (id: string) => void, onLayout: (type: LayoutType) => void, diagrams: DiagramDefinition[], selectedDiagramId: string, fileLoaded: boolean, diagramFileName: string, sqlFileName: string }} */
   let {
     onNew,
     onLoad,
     onRefresh,
     onSave,
     onDiagramChange,
+    onLayout,
     diagrams,
     selectedDiagramId,
     fileLoaded,
     diagramFileName = '',
     sqlFileName = '',
   } = $props();
+
+  /** @type {LayoutType[]} */
+  const layoutOptions = [
+    'circular',
+  ];
+
+  /**
+   * Handle layout selection.
+   * @param {Event} e
+   */
+  function handleLayoutChange(e) {
+    const select = /** @type {HTMLSelectElement} */ (e.target);
+    const value = /** @type {LayoutType} */ (select.value);
+    if (value) {
+      onLayout(value);
+      // Reset to placeholder after selection
+      select.value = '';
+    }
+  }
 </script>
 
 <header>
@@ -23,6 +44,16 @@
   <button onclick={onLoad}>Open</button>
   <button onclick={onRefresh} disabled={!fileLoaded}>Refresh</button>
   <button onclick={onSave} disabled={!fileLoaded}>Save</button>
+  <select
+    class="layout-select"
+    onchange={handleLayoutChange}
+    disabled={!fileLoaded}
+  >
+    <option value="">Layout</option>
+    {#each layoutOptions as layout}
+      <option value={layout}>{layout.charAt(0).toUpperCase() + layout.slice(1)}</option>
+    {/each}
+  </select>
   {#if diagramFileName || sqlFileName}
     <span class="file-names">
       {#if diagramFileName}<span class="file-name">{diagramFileName}</span>{/if}
