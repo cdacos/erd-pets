@@ -1,5 +1,5 @@
 <script>
-  import { BaseEdge, getBezierPath } from '@xyflow/svelte';
+  import { BaseEdge, getSmoothStepPath, getBezierPath } from '@xyflow/svelte';
 
   let {
     id,
@@ -18,15 +18,34 @@
 
   let showTooltip = $state(false);
 
+  // SmoothStep offset controls how far the path extends before turning
+  const EDGE_OFFSET = 50;
+  // Border radius for rounded corners
+  const BORDER_RADIUS = 20;
+  // Bezier curvature (higher = more curved)
+  const BEZIER_CURVATURE = 0.5;
+
   let path = $derived(
-    getBezierPath({
-      sourceX,
-      sourceY,
-      sourcePosition,
-      targetX,
-      targetY,
-      targetPosition,
-    })
+    data?.edgeStyle === 'bezier'
+      ? getBezierPath({
+          sourceX,
+          sourceY,
+          sourcePosition,
+          targetX,
+          targetY,
+          targetPosition,
+          curvature: BEZIER_CURVATURE,
+        })
+      : getSmoothStepPath({
+          sourceX,
+          sourceY,
+          sourcePosition,
+          targetX,
+          targetY,
+          targetPosition,
+          offset: EDGE_OFFSET,
+          borderRadius: BORDER_RADIUS,
+        })
   );
 
   let tooltipX = $derived((sourceX + targetX) / 2);

@@ -2,9 +2,10 @@
   /**
    * @typedef {import('./parser/types.js').DiagramDefinition} DiagramDefinition
    * @typedef {'circular'} LayoutType
+   * @typedef {'rounded' | 'bezier'} EdgeStyle
    */
 
-  /** @type {{ onNew: () => void, onLoad: () => void, onRefresh: () => void, onSave: () => void, onDiagramChange: (id: string) => void, onLayout: (type: LayoutType) => void, diagrams: DiagramDefinition[], selectedDiagramId: string, fileLoaded: boolean, diagramFileName: string, sqlFileName: string }} */
+  /** @type {{ onNew: () => void, onLoad: () => void, onRefresh: () => void, onSave: () => void, onDiagramChange: (id: string) => void, onLayout: (type: LayoutType) => void, onEdgeStyleChange: (style: EdgeStyle) => void, diagrams: DiagramDefinition[], selectedDiagramId: string, fileLoaded: boolean, diagramFileName: string, sqlFileName: string, edgeStyle: EdgeStyle }} */
   let {
     onNew,
     onLoad,
@@ -12,11 +13,13 @@
     onSave,
     onDiagramChange,
     onLayout,
+    onEdgeStyleChange,
     diagrams,
     selectedDiagramId,
     fileLoaded,
     diagramFileName = '',
     sqlFileName = '',
+    edgeStyle = 'rounded',
   } = $props();
 
   /** @type {LayoutType[]} */
@@ -53,6 +56,13 @@
     {#each layoutOptions as layout}
       <option value={layout}>{layout.charAt(0).toUpperCase() + layout.slice(1)}</option>
     {/each}
+  </select>
+  <select
+    value={edgeStyle}
+    onchange={(e) => onEdgeStyleChange(e.target.value)}
+  >
+    <option value="rounded">Edges: Rounded</option>
+    <option value="bezier">Edges: Bezier</option>
   </select>
   {#if diagramFileName || sqlFileName}
     <span class="file-names">

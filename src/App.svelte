@@ -80,6 +80,9 @@
 
   let showLayoutConfirm = $state(false);
 
+  /** @type {import('./lib/DiagramToolbar.svelte').EdgeStyle} */
+  let edgeStyle = $state('rounded');
+
   /**
    * Determine the best handles for connecting two nodes based on their positions.
    * Uses left/right edge of the specific column row, choosing optimal routing:
@@ -201,7 +204,7 @@
           targetHandle: handles.targetHandle,
           type: 'tooltip',
           markerEnd: { type: MarkerType.ArrowClosed, width: 25, height: 25 },
-          data: { sourceColumn: fk.sourceColumn, targetColumn: fk.targetColumn },
+          data: { sourceColumn: fk.sourceColumn, targetColumn: fk.targetColumn, edgeStyle },
         };
       });
 
@@ -290,7 +293,7 @@
             height: 25,
             color: resolved.color,
           },
-          data: { sourceColumn: fk.sourceColumn, targetColumn: fk.targetColumn },
+          data: { sourceColumn: fk.sourceColumn, targetColumn: fk.targetColumn, edgeStyle },
         };
       })
       .filter((edge) => edge !== null);
@@ -650,6 +653,19 @@
     pendingLayout = null;
   }
 
+  /**
+   * Handle edge style change.
+   * @param {import('./lib/DiagramToolbar.svelte').EdgeStyle} newStyle
+   */
+  function handleEdgeStyleChange(newStyle) {
+    edgeStyle = newStyle;
+    // Update all existing edges with new style
+    edges = edges.map((edge) => ({
+      ...edge,
+      data: { ...edge.data, edgeStyle: newStyle },
+    }));
+  }
+
   // Keyboard shortcuts
   $effect(() => {
     /**
@@ -684,11 +700,13 @@
     onSave={handleSave}
     onDiagramChange={handleDiagramChange}
     onLayout={handleLayoutRequest}
+    onEdgeStyleChange={handleEdgeStyleChange}
     {diagrams}
     selectedDiagramId={selectedDiagramId}
     fileLoaded={!!diagramHandle}
     {diagramFileName}
     {sqlFileName}
+    {edgeStyle}
   />
 
   <main>
