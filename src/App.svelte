@@ -1,4 +1,5 @@
 <script>
+  import { untrack } from 'svelte';
   import {
     SvelteFlow,
     Controls,
@@ -88,6 +89,46 @@
   let edgeStyle = $state('rounded');
 
   let showTableList = $state(false);
+
+  /** @type {boolean} */
+  let isDarkMode = $state(false);
+
+  // Track dark mode changes
+  $effect(() => {
+    const updateDarkMode = () => {
+      isDarkMode = document.documentElement.classList.contains('dark');
+    };
+
+    updateDarkMode();
+
+    const observer = new MutationObserver(updateDarkMode);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+
+    return () => observer.disconnect();
+  });
+
+  // Arrow marker color based on theme
+  let markerColor = $derived(isDarkMode ? '#ffffff' : undefined);
+
+  // Update edge markers when theme changes
+  $effect(() => {
+    const themeColor = markerColor; // This creates the dependency on markerColor
+    // Read and write edges without tracking to avoid infinite loop
+    untrack(() => {
+      if (edges.length > 0) {
+        edges = edges.map((edge) => ({
+          ...edge,
+          markerEnd: {
+            ...edge.markerEnd,
+            color: edge.data?.customMarkerColor ?? themeColor,
+          },
+        }));
+      }
+    });
+  });
 
   /** @type {{ x: number, y: number, tableNames: string[] } | null} */
   let contextMenu = $state(null);
@@ -343,8 +384,8 @@
           sourceHandle: handles.sourceHandle,
           targetHandle: handles.targetHandle,
           type: 'tooltip',
-          markerEnd: { type: MarkerType.ArrowClosed, width: 25, height: 25 },
-          data: { sourceColumn: fk.sourceColumn, targetColumn: fk.targetColumn, edgeStyle },
+          markerEnd: { type: MarkerType.ArrowClosed, width: 50, height: 50, color: markerColor },
+          data: { sourceColumn: fk.sourceColumn, targetColumn: fk.targetColumn, edgeStyle, customMarkerColor: undefined },
         };
       });
 
@@ -430,11 +471,11 @@
           style,
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            width: 25,
-            height: 25,
-            color: resolved.color,
+            width: 50,
+            height: 50,
+            color: resolved.color ?? markerColor,
           },
-          data: { sourceColumn: fk.sourceColumn, targetColumn: fk.targetColumn, edgeStyle },
+          data: { sourceColumn: fk.sourceColumn, targetColumn: fk.targetColumn, edgeStyle, customMarkerColor: resolved.color },
         };
       })
       .filter((edge) => edge !== null);

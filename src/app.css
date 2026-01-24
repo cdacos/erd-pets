@@ -130,7 +130,7 @@ html.dark {
 html.dark .svelte-flow {
   --xy-node-background-color: var(--color-surface);
   --xy-node-border-color: var(--color-border);
-  --xy-edge-stroke: var(--color-text-muted);
+  --xy-edge-stroke: #ffffff;
 }
 
 html.dark .svelte-flow__controls {

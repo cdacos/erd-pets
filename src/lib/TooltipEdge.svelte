@@ -55,8 +55,8 @@
 <defs>
   <marker
     id={`arrow-${id}`}
-    markerWidth="12.5"
-    markerHeight="12.5"
+    markerWidth="25"
+    markerHeight="25"
     viewBox="-10 -10 20 20"
     markerUnits="strokeWidth"
     orient="auto-start-reverse"
@@ -67,7 +67,7 @@
       stroke-linecap="round"
       stroke-linejoin="round"
       stroke-width="1"
-      fill="currentColor"
+      fill={markerEnd?.color ?? 'var(--xy-edge-stroke, currentColor)'}
       points="-5,-4 0,0 -5,4 -5,-4"
     />
   </marker>
