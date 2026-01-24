@@ -5,7 +5,7 @@
    * @typedef {'rounded' | 'bezier'} EdgeStyle
    */
 
-  /** @type {{ onNew: () => void, onLoad: () => void, onRefresh: () => void, onSave: () => void, onDiagramChange: (id: string) => void, onLayout: (type: LayoutType) => void, onEdgeStyleChange: (style: EdgeStyle) => void, diagrams: DiagramDefinition[], selectedDiagramId: string, fileLoaded: boolean, diagramFileName: string, sqlFileName: string, edgeStyle: EdgeStyle }} */
+  /** @type {{ onNew: () => void, onLoad: () => void, onRefresh: () => void, onSave: () => void, onDiagramChange: (id: string) => void, onLayout: (type: LayoutType) => void, onEdgeStyleChange: (style: EdgeStyle) => void, onExportPng: () => void, onExportSvg: () => void, diagrams: DiagramDefinition[], selectedDiagramId: string, fileLoaded: boolean, diagramFileName: string, sqlFileName: string, edgeStyle: EdgeStyle }} */
   let {
     onNew,
     onLoad,
@@ -14,6 +14,8 @@
     onDiagramChange,
     onLayout,
     onEdgeStyleChange,
+    onExportPng,
+    onExportSvg,
     diagrams,
     selectedDiagramId,
     fileLoaded,
@@ -40,6 +42,22 @@
       select.value = '';
     }
   }
+
+  /**
+   * Handle export selection.
+   * @param {Event} e
+   */
+  function handleExportChange(e) {
+    const select = /** @type {HTMLSelectElement} */ (e.target);
+    const value = select.value;
+    if (value === 'png') {
+      onExportPng();
+    } else if (value === 'svg') {
+      onExportSvg();
+    }
+    // Reset to placeholder after selection
+    select.value = '';
+  }
 </script>
 
 <header>
@@ -47,6 +65,15 @@
   <button onclick={onLoad}>Open</button>
   <button onclick={onRefresh} disabled={!fileLoaded}>Refresh</button>
   <button onclick={onSave} disabled={!fileLoaded}>Save</button>
+  <select
+    class="export-select"
+    onchange={handleExportChange}
+    disabled={!fileLoaded}
+  >
+    <option value="">Export</option>
+    <option value="png">PNG</option>
+    <option value="svg">SVG</option>
+  </select>
   <select
     class="layout-select"
     onchange={handleLayoutChange}

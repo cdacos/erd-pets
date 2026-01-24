@@ -75,6 +75,7 @@
 
 <g
   class="tooltip-edge"
+  role="graphics-symbol"
   onmouseenter={() => (showTooltip = true)}
   onmouseleave={() => (showTooltip = false)}
 >

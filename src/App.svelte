@@ -5,7 +5,10 @@
     Background,
     MiniMap,
     MarkerType,
+    getNodesBounds,
+    getViewportForBounds,
   } from '@xyflow/svelte';
+  import { toPng, toSvg } from 'html-to-image';
   import '@xyflow/svelte/dist/style.css';
   import TableNode from './lib/TableNode.svelte';
   import TooltipEdge from './lib/TooltipEdge.svelte';
@@ -666,6 +669,110 @@
     }));
   }
 
+  /**
+   * Export diagram as PNG image.
+   */
+  async function handleExportPng() {
+    if (nodes.length === 0) {
+      showToast('No diagram to export.', 'error');
+      return;
+    }
+
+    try {
+      const nodesBounds = getNodesBounds(nodes);
+      const padding = 50;
+      const imageWidth = nodesBounds.width + padding * 2;
+      const imageHeight = nodesBounds.height + padding * 2;
+
+      const viewport = getViewportForBounds(
+        nodesBounds,
+        imageWidth,
+        imageHeight,
+        0.5,
+        2.0,
+        padding
+      );
+
+      const viewportElement = document.querySelector('.svelte-flow__viewport');
+      if (!viewportElement || !viewport) {
+        showToast('Failed to capture diagram.', 'error');
+        return;
+      }
+
+      const dataUrl = await toPng(viewportElement, {
+        backgroundColor: '#fafafa',
+        width: imageWidth,
+        height: imageHeight,
+        style: {
+          width: `${imageWidth}px`,
+          height: `${imageHeight}px`,
+          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+        },
+      });
+
+      const link = document.createElement('a');
+      link.download = `${diagramFileName.replace(/\.erd-pets\.json$/, '') || 'diagram'}.png`;
+      link.href = dataUrl;
+      link.click();
+
+      showToast('Exported as PNG.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to export PNG.', 'error');
+    }
+  }
+
+  /**
+   * Export diagram as SVG image.
+   */
+  async function handleExportSvg() {
+    if (nodes.length === 0) {
+      showToast('No diagram to export.', 'error');
+      return;
+    }
+
+    try {
+      const nodesBounds = getNodesBounds(nodes);
+      const padding = 50;
+      const imageWidth = nodesBounds.width + padding * 2;
+      const imageHeight = nodesBounds.height + padding * 2;
+
+      const viewport = getViewportForBounds(
+        nodesBounds,
+        imageWidth,
+        imageHeight,
+        0.5,
+        2.0,
+        padding
+      );
+
+      const viewportElement = document.querySelector('.svelte-flow__viewport');
+      if (!viewportElement || !viewport) {
+        showToast('Failed to capture diagram.', 'error');
+        return;
+      }
+
+      const dataUrl = await toSvg(viewportElement, {
+        backgroundColor: '#fafafa',
+        width: imageWidth,
+        height: imageHeight,
+        style: {
+          width: `${imageWidth}px`,
+          height: `${imageHeight}px`,
+          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+        },
+      });
+
+      const link = document.createElement('a');
+      link.download = `${diagramFileName.replace(/\.erd-pets\.json$/, '') || 'diagram'}.svg`;
+      link.href = dataUrl;
+      link.click();
+
+      showToast('Exported as SVG.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to export SVG.', 'error');
+    }
+  }
+
   // Keyboard shortcuts
   $effect(() => {
     /**
@@ -701,6 +808,8 @@
     onDiagramChange={handleDiagramChange}
     onLayout={handleLayoutRequest}
     onEdgeStyleChange={handleEdgeStyleChange}
+    onExportPng={handleExportPng}
+    onExportSvg={handleExportSvg}
     {diagrams}
     selectedDiagramId={selectedDiagramId}
     fileLoaded={!!diagramHandle}
