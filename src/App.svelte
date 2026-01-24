@@ -6,7 +6,7 @@
     MiniMap,
     MarkerType,
   } from '@xyflow/svelte';
-  import { toPng, toSvg } from 'html-to-image';
+  import { toCanvas } from 'html-to-image';
   import '@xyflow/svelte/dist/style.css';
   import TableNode from './lib/TableNode.svelte';
   import TooltipEdge from './lib/TooltipEdge.svelte';
@@ -712,9 +712,10 @@
   }
 
   /**
-   * Export diagram as PNG image.
+   * Export diagram as lossless WebP image.
+   * @param {number} pixelRatio - 1 for standard, 2 for high-DPI/Retina
    */
-  async function handleExportPng() {
+  async function handleExport(pixelRatio) {
     if (nodes.length === 0) {
       showToast('No diagram to export.', 'error');
       return;
@@ -737,9 +738,9 @@
         return;
       }
 
-      // Translate to position content at (padding, padding), no scaling
-      const dataUrl = await toPng(viewportElement, {
+      const canvas = await toCanvas(viewportElement, {
         backgroundColor: '#fafafa',
+        pixelRatio,
         width: imageWidth,
         height: imageHeight,
         style: {
@@ -749,63 +750,17 @@
         },
       });
 
+      // Use lossy WebP with high quality
+      const dataUrl = canvas.toDataURL('image/webp', 0.92);
+
       const link = document.createElement('a');
-      link.download = `${diagramFileName.replace(/\.erd-pets\.json$/, '') || 'diagram'}.png`;
+      link.download = `${diagramFileName.replace(/\.erd-pets\.json$/, '') || 'diagram'}.webp`;
       link.href = dataUrl;
       link.click();
 
-      showToast('Exported as PNG.', 'success');
+      showToast(`Exported as WebP (${pixelRatio}x).`, 'success');
     } catch (err) {
-      showToast(err.message || 'Failed to export PNG.', 'error');
-    }
-  }
-
-  /**
-   * Export diagram as SVG image.
-   */
-  async function handleExportSvg() {
-    if (nodes.length === 0) {
-      showToast('No diagram to export.', 'error');
-      return;
-    }
-
-    try {
-      const nodesBounds = getNodesBoundsWithDimensions();
-      if (!nodesBounds) {
-        showToast('Failed to calculate diagram bounds.', 'error');
-        return;
-      }
-
-      const padding = 30;
-      const imageWidth = nodesBounds.width + padding * 2;
-      const imageHeight = nodesBounds.height + padding * 2;
-
-      const viewportElement = document.querySelector('.svelte-flow__viewport');
-      if (!viewportElement) {
-        showToast('Failed to capture diagram.', 'error');
-        return;
-      }
-
-      // Translate to position content at (padding, padding), no scaling
-      const dataUrl = await toSvg(viewportElement, {
-        backgroundColor: '#fafafa',
-        width: imageWidth,
-        height: imageHeight,
-        style: {
-          width: `${imageWidth}px`,
-          height: `${imageHeight}px`,
-          transform: `translate(${-nodesBounds.x + padding}px, ${-nodesBounds.y + padding}px)`,
-        },
-      });
-
-      const link = document.createElement('a');
-      link.download = `${diagramFileName.replace(/\.erd-pets\.json$/, '') || 'diagram'}.svg`;
-      link.href = dataUrl;
-      link.click();
-
-      showToast('Exported as SVG.', 'success');
-    } catch (err) {
-      showToast(err.message || 'Failed to export SVG.', 'error');
+      showToast(err.message || 'Failed to export.', 'error');
     }
   }
 
@@ -844,8 +799,7 @@
     onDiagramChange={handleDiagramChange}
     onLayout={handleLayoutRequest}
     onEdgeStyleChange={handleEdgeStyleChange}
-    onExportPng={handleExportPng}
-    onExportSvg={handleExportSvg}
+    onExport={handleExport}
     {diagrams}
     selectedDiagramId={selectedDiagramId}
     fileLoaded={!!diagramHandle}

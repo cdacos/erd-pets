@@ -5,7 +5,7 @@
    * @typedef {'rounded' | 'bezier'} EdgeStyle
    */
 
-  /** @type {{ onNew: () => void, onLoad: () => void, onRefresh: () => void, onSave: () => void, onDiagramChange: (id: string) => void, onLayout: (type: LayoutType) => void, onEdgeStyleChange: (style: EdgeStyle) => void, onExportPng: () => void, onExportSvg: () => void, diagrams: DiagramDefinition[], selectedDiagramId: string, fileLoaded: boolean, diagramFileName: string, sqlFileName: string, edgeStyle: EdgeStyle }} */
+  /** @type {{ onNew: () => void, onLoad: () => void, onRefresh: () => void, onSave: () => void, onDiagramChange: (id: string) => void, onLayout: (type: LayoutType) => void, onEdgeStyleChange: (style: EdgeStyle) => void, onExport: (pixelRatio: number) => void, diagrams: DiagramDefinition[], selectedDiagramId: string, fileLoaded: boolean, diagramFileName: string, sqlFileName: string, edgeStyle: EdgeStyle }} */
   let {
     onNew,
     onLoad,
@@ -14,8 +14,7 @@
     onDiagramChange,
     onLayout,
     onEdgeStyleChange,
-    onExportPng,
-    onExportSvg,
+    onExport,
     diagrams,
     selectedDiagramId,
     fileLoaded,
@@ -50,10 +49,10 @@
   function handleExportChange(e) {
     const select = /** @type {HTMLSelectElement} */ (e.target);
     const value = select.value;
-    if (value === 'png') {
-      onExportPng();
-    } else if (value === 'svg') {
-      onExportSvg();
+    if (value === '1x') {
+      onExport(1);
+    } else if (value === '2x') {
+      onExport(2);
     }
     // Reset to placeholder after selection
     select.value = '';
@@ -71,8 +70,8 @@
     disabled={!fileLoaded}
   >
     <option value="">Export</option>
-    <option value="png">PNG</option>
-    <option value="svg">SVG</option>
+    <option value="1x">WebP (1x)</option>
+    <option value="2x">WebP (2x)</option>
   </select>
   <select
     class="layout-select"
