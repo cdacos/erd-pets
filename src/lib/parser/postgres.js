@@ -56,7 +56,7 @@ export function parsePostgresSQL(sql) {
 						stream.match('KEYWORD', 'EXISTS');
 					}
 
-					const table = parseCreateTable(stream, errors);
+					const table = parseCreateTable(stream, foreignKeys, tableMap, errors);
 					if (table) {
 						tables.push(table);
 						tableMap.set(table.qualifiedName, table);
@@ -90,16 +90,31 @@ export function parsePostgresSQL(sql) {
 		}
 	}
 
+	// Post-process: resolve any FKs with empty targetColumn (forward references from inline REFERENCES)
+	for (const fk of foreignKeys) {
+		if (!fk.targetColumn) {
+			const targetTable = tableMap.get(fk.targetTable);
+			if (targetTable) {
+				const pkColumns = targetTable.columns.filter((c) => c.isPrimaryKey);
+				if (pkColumns.length > 0) {
+					fk.targetColumn = pkColumns[0].name;
+				}
+			}
+		}
+	}
+
 	return { tables, foreignKeys, errors };
 }
 
 /**
  * Parse a CREATE TABLE statement (after CREATE TABLE keywords)
  * @param {TokenStream} stream
+ * @param {ForeignKey[]} foreignKeys - Array to add inline foreign keys to
+ * @param {Map<string, Table>} tableMap - Map of already-parsed tables for PK resolution
  * @param {ParseError[]} errors
  * @returns {Table | null}
  */
-function parseCreateTable(stream, errors) {
+function parseCreateTable(stream, foreignKeys, tableMap, errors) {
 	// Parse table name (schema.name or just name)
 	const { schema, name } = parseQualifiedName(stream);
 
@@ -107,6 +122,8 @@ function parseCreateTable(stream, errors) {
 		errors.push({ message: 'Expected table name', line: stream.line() });
 		return null;
 	}
+
+	const qualifiedName = `${schema}.${name}`;
 
 	// Expect opening parenthesis
 	if (!stream.match('PUNCTUATION', '(')) {
@@ -130,7 +147,7 @@ function parseCreateTable(stream, errors) {
 			) {
 				skipTableConstraint(stream);
 			} else {
-				const column = parseColumn(stream);
+				const column = parseColumn(stream, qualifiedName, foreignKeys, tableMap, errors);
 				if (column) {
 					columns.push(column);
 				}
@@ -160,7 +177,7 @@ function parseCreateTable(stream, errors) {
 	return {
 		schema,
 		name,
-		qualifiedName: `${schema}.${name}`,
+		qualifiedName,
 		columns
 	};
 }
@@ -213,9 +230,13 @@ function parseIdentifier(stream) {
 /**
  * Parse a column definition
  * @param {TokenStream} stream
+ * @param {string} qualifiedTableName - The qualified name of the table containing this column
+ * @param {ForeignKey[]} foreignKeys - Array to add inline foreign keys to
+ * @param {Map<string, Table>} tableMap - Map of already-parsed tables for PK resolution
+ * @param {ParseError[]} errors - Array to add errors to
  * @returns {Column | null}
  */
-function parseColumn(stream) {
+function parseColumn(stream, qualifiedTableName, foreignKeys, tableMap, errors) {
 	const name = parseIdentifier(stream);
 	if (!name) {
 		return null;
@@ -223,8 +244,8 @@ function parseColumn(stream) {
 
 	const type = parseColumnType(stream);
 
-	// Skip column modifiers (NOT NULL, DEFAULT, etc.)
-	skipColumnModifiers(stream);
+	// Parse column modifiers, including inline REFERENCES
+	parseColumnModifiers(stream, qualifiedTableName, name, foreignKeys, tableMap, errors);
 
 	return {
 		name,
@@ -328,7 +349,87 @@ function parseParenthesizedArgs(stream) {
 }
 
 /**
- * Skip column modifiers until we hit comma or closing paren
+ * Parse column modifiers, extracting inline REFERENCES if present
+ * @param {TokenStream} stream
+ * @param {string} qualifiedTableName - The qualified name of the table containing this column
+ * @param {string} columnName - The name of this column
+ * @param {ForeignKey[]} foreignKeys - Array to add inline foreign keys to
+ * @param {Map<string, Table>} tableMap - Map of already-parsed tables for PK resolution
+ * @param {ParseError[]} errors - Array to add errors to
+ */
+function parseColumnModifiers(stream, qualifiedTableName, columnName, foreignKeys, tableMap, errors) {
+	let parenDepth = 0;
+
+	while (!stream.isEOF()) {
+		const token = stream.peek();
+
+		if (token.type === 'PUNCTUATION') {
+			if (token.value === '(') {
+				parenDepth++;
+				stream.next();
+			} else if (token.value === ')') {
+				if (parenDepth > 0) {
+					parenDepth--;
+					stream.next();
+				} else {
+					// End of column list
+					break;
+				}
+			} else if (token.value === ',' && parenDepth === 0) {
+				// End of this column
+				break;
+			} else {
+				stream.next();
+			}
+		} else if (token.type === 'KEYWORD' && token.value === 'REFERENCES' && parenDepth === 0) {
+			// Parse inline foreign key reference
+			const fkLine = stream.line();
+			stream.next(); // consume REFERENCES
+
+			const { schema: targetSchema, name: targetName } = parseQualifiedName(stream);
+			const targetQualifiedName = `${targetSchema}.${targetName}`;
+
+			// Check for optional target column
+			let targetColumn = '';
+			if (stream.match('PUNCTUATION', '(')) {
+				const col = parseIdentifier(stream);
+				if (col) {
+					targetColumn = col;
+				}
+				stream.match('PUNCTUATION', ')');
+			}
+
+			// If no target column specified, try to resolve from PK
+			if (!targetColumn) {
+				const targetTable = tableMap.get(targetQualifiedName);
+				if (targetTable) {
+					const pkColumns = targetTable.columns.filter((c) => c.isPrimaryKey);
+					if (pkColumns.length > 0) {
+						targetColumn = pkColumns[0].name;
+					} else {
+						errors.push({
+							message: `Inline foreign key references ${targetQualifiedName} which has no primary key`,
+							line: fkLine
+						});
+					}
+				}
+				// If target table not found yet, leave targetColumn empty for later resolution
+			}
+
+			foreignKeys.push({
+				sourceTable: qualifiedTableName,
+				sourceColumn: columnName,
+				targetTable: targetQualifiedName,
+				targetColumn
+			});
+		} else {
+			stream.next();
+		}
+	}
+}
+
+/**
+ * Skip column modifiers until we hit comma or closing paren (legacy, kept for table constraints)
  * @param {TokenStream} stream
  */
 function skipColumnModifiers(stream) {

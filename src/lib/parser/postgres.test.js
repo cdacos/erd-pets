@@ -577,6 +577,163 @@ describe('parsePostgresSQL foreign keys', () => {
 	});
 });
 
+describe('parsePostgresSQL inline REFERENCES', () => {
+	it('parses inline foreign key with explicit target column', () => {
+		const sql = `
+      CREATE TABLE users (id integer);
+      CREATE TABLE posts (id integer, user_id integer REFERENCES users(id));
+      ALTER TABLE users ADD PRIMARY KEY (id);
+      ALTER TABLE posts ADD PRIMARY KEY (id);
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.foreignKeys).toHaveLength(1);
+		expect(result.foreignKeys[0]).toEqual({
+			sourceTable: 'public.posts',
+			sourceColumn: 'user_id',
+			targetTable: 'public.users',
+			targetColumn: 'id'
+		});
+	});
+
+	it('parses inline foreign key with NOT NULL modifier', () => {
+		const sql = `
+      CREATE TABLE users (id integer);
+      CREATE TABLE posts (id integer, user_id integer NOT NULL REFERENCES users(id));
+      ALTER TABLE users ADD PRIMARY KEY (id);
+      ALTER TABLE posts ADD PRIMARY KEY (id);
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.foreignKeys).toHaveLength(1);
+		expect(result.foreignKeys[0]).toEqual({
+			sourceTable: 'public.posts',
+			sourceColumn: 'user_id',
+			targetTable: 'public.users',
+			targetColumn: 'id'
+		});
+	});
+
+	it('resolves target column to PK when not specified (inline)', () => {
+		const sql = `
+      CREATE TABLE users (id integer);
+      ALTER TABLE users ADD PRIMARY KEY (id);
+      CREATE TABLE posts (id integer, user_id integer REFERENCES users);
+      ALTER TABLE posts ADD PRIMARY KEY (id);
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.foreignKeys).toHaveLength(1);
+		expect(result.foreignKeys[0]).toEqual({
+			sourceTable: 'public.posts',
+			sourceColumn: 'user_id',
+			targetTable: 'public.users',
+			targetColumn: 'id'
+		});
+	});
+
+	it('resolves forward reference target column via post-processing', () => {
+		const sql = `
+      CREATE TABLE posts (id integer, user_id integer REFERENCES users);
+      CREATE TABLE users (id integer);
+      ALTER TABLE users ADD PRIMARY KEY (id);
+      ALTER TABLE posts ADD PRIMARY KEY (id);
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.foreignKeys).toHaveLength(1);
+		expect(result.foreignKeys[0]).toEqual({
+			sourceTable: 'public.posts',
+			sourceColumn: 'user_id',
+			targetTable: 'public.users',
+			targetColumn: 'id'
+		});
+	});
+
+	it('parses schema-qualified inline foreign keys', () => {
+		const sql = `
+      CREATE TABLE contract.contract_type (id integer);
+      ALTER TABLE contract.contract_type ADD PRIMARY KEY (id);
+      CREATE TABLE contract.contract (id integer, contract_type_id integer NOT NULL REFERENCES contract.contract_type(id));
+      ALTER TABLE contract.contract ADD PRIMARY KEY (id);
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.foreignKeys).toHaveLength(1);
+		expect(result.foreignKeys[0]).toEqual({
+			sourceTable: 'contract.contract',
+			sourceColumn: 'contract_type_id',
+			targetTable: 'contract.contract_type',
+			targetColumn: 'id'
+		});
+	});
+
+	it('parses multiple inline foreign keys in same table', () => {
+		const sql = `
+      CREATE TABLE users (id integer);
+      CREATE TABLE categories (id integer);
+      ALTER TABLE users ADD PRIMARY KEY (id);
+      ALTER TABLE categories ADD PRIMARY KEY (id);
+      CREATE TABLE posts (
+        id integer,
+        user_id integer REFERENCES users(id),
+        category_id integer REFERENCES categories(id)
+      );
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.foreignKeys).toHaveLength(2);
+		expect(result.foreignKeys[0].sourceColumn).toBe('user_id');
+		expect(result.foreignKeys[0].targetTable).toBe('public.users');
+		expect(result.foreignKeys[1].sourceColumn).toBe('category_id');
+		expect(result.foreignKeys[1].targetTable).toBe('public.categories');
+	});
+
+	it('handles mix of inline and ALTER TABLE foreign keys', () => {
+		const sql = `
+      CREATE TABLE users (id integer);
+      CREATE TABLE categories (id integer);
+      ALTER TABLE users ADD PRIMARY KEY (id);
+      ALTER TABLE categories ADD PRIMARY KEY (id);
+      CREATE TABLE posts (
+        id integer,
+        user_id integer REFERENCES users(id),
+        category_id integer
+      );
+      ALTER TABLE posts ADD FOREIGN KEY (category_id) REFERENCES categories(id);
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.foreignKeys).toHaveLength(2);
+		expect(result.foreignKeys[0].sourceColumn).toBe('user_id');
+		expect(result.foreignKeys[1].sourceColumn).toBe('category_id');
+	});
+
+	it('creates FK even when target table not found (external reference, inline)', () => {
+		const sql = `
+      CREATE TABLE posts (id integer, user_id integer REFERENCES external.users(id));
+    `;
+
+		const result = parsePostgresSQL(sql);
+
+		expect(result.foreignKeys).toHaveLength(1);
+		expect(result.foreignKeys[0]).toEqual({
+			sourceTable: 'public.posts',
+			sourceColumn: 'user_id',
+			targetTable: 'external.users',
+			targetColumn: 'id'
+		});
+		expect(result.errors).toHaveLength(0);
+	});
+});
+
 describe('parsePostgresSQL with contracts.sql patterns', () => {
 	it('parses all foreign keys from contracts.sql pattern', () => {
 		const sql = `
