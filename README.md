@@ -16,27 +16,45 @@ npm install
 npm run dev
 ```
 
-## @erd-pets Block Syntax
+## Usage
 
-Add a comment block to your SQL file:
+1. Click **New** to create a diagram from a SQL schema file
+2. Or click **Open** to load an existing `.erd-pets.json` file
+3. Drag tables to arrange them
+4. Click **Save** (or `Cmd+S`) to persist positions
 
-```sql
-/* @erd-pets
-[diagram_name]
-schema.table 100 200
-schema.other
-schema.*
-*/
+## File Format
+
+Diagrams are stored in `.erd-pets.json` files (JSONC with comments allowed):
+
+```json
+{
+  "sql": "schema.sql",
+  "diagrams": [
+    {
+      "id": "main",
+      "title": "Core Tables",
+      "tables": [
+        { "name": "public.users", "x": 100, "y": 200, "color": "#3b82f6" },
+        { "name": "public.posts", "x": 400, "y": 200 },
+        { "name": "contract.*" }
+      ]
+    }
+  ]
+}
 ```
 
-### Entries
+### Table Entries
 
 | Format | Description |
 |--------|-------------|
-| `schema.table x y` | Table at position (x, y) |
-| `schema.table` | Table with auto-generated position |
-| `schema.*` | All tables in schema |
-| `prefix*` | All tables matching prefix |
-| `*` | All tables |
+| `{ "name": "schema.table", "x": 100, "y": 200 }` | Table at position (100, 200) |
+| `{ "name": "schema.table" }` | Table with auto-generated position |
+| `{ "name": "schema.*" }` | All tables in schema |
+| `{ "name": "schema.prefix*" }` | Tables in schema matching prefix |
+| `{ "name": "prefix*" }` | All tables matching prefix |
+| `{ "name": "*" }` | All tables |
 
-Explicit entries override wildcards.
+Optional properties: `id`, `color` (hex string).
+
+Explicit entries override wildcards and can specify positions for wildcard-matched tables.
