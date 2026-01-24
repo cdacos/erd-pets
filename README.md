@@ -55,6 +55,17 @@ Diagrams are stored in `.erd-pets.json` files (JSONC with comments allowed):
 | `{ "name": "prefix*" }` | All tables matching prefix |
 | `{ "name": "*" }` | All tables |
 
-Optional properties: `id`, `color` (hex string).
+Optional properties: `id`, `color` (hex string), `visible` (boolean, default `true`).
 
 Explicit entries override wildcards and can specify positions for wildcard-matched tables.
+
+Use `"visible": false` to hide tables matched by wildcards:
+
+```json
+{
+  "tables": [
+    { "name": "audit.*", "visible": false },
+    { "name": "*" }
+  ]
+}
+```

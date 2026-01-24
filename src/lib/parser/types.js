@@ -88,14 +88,16 @@
  * @property {number} [x] - Position in pixels
  * @property {number} [y] - Position in pixels
  * @property {string} [color] - Hex color for table header
+ * @property {boolean} [visible] - Whether table is visible (default: true)
  */
 
 /**
  * @typedef {Object} RelationRule
  * @property {string} from - Glob pattern for source column (schema.table.column)
  * @property {string} to - Glob pattern for target column (schema.table.column)
- * @property {'solid' | 'dashed' | 'hidden'} [line] - Line style (default: solid)
+ * @property {'solid' | 'dashed'} [line] - Line style (default: solid)
  * @property {string} [color] - Hex color for the edge
+ * @property {boolean} [visible] - Whether relation is visible (default: true)
  */
 
 /**

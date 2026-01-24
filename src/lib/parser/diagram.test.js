@@ -670,7 +670,7 @@ describe('serializeDiagramFile', () => {
           title: 'Main',
           tables: [{ name: 'public.users', x: 100, y: 200 }],
           relations: [
-            { from: '*.created_by', to: '*.user.id', line: 'hidden' },
+            { from: '*.created_by', to: '*.user.id', visible: false },
             { from: '*.tenant_id', to: '*.tenant.id', line: 'dashed', color: '#9ca3af' },
           ],
         },
@@ -682,7 +682,7 @@ describe('serializeDiagramFile', () => {
     const parsed = JSON.parse(result);
 
     expect(parsed.diagrams[0].relations).toEqual([
-      { from: '*.created_by', to: '*.user.id', line: 'hidden' },
+      { from: '*.created_by', to: '*.user.id', visible: false },
       { from: '*.tenant_id', to: '*.tenant.id', line: 'dashed', color: '#9ca3af' },
     ]);
   });
@@ -697,7 +697,7 @@ describe('parseDiagramFile relations validation', () => {
     "title": "Test",
     "tables": [],
     "relations": [
-      { "from": "*.created_by", "to": "*.user.id", "line": "hidden" },
+      { "from": "*.created_by", "to": "*.user.id", "visible": false },
       { "from": "*.order_id", "to": "*.orders.id", "color": "#22c55e" }
     ]
   }]
@@ -766,7 +766,7 @@ describe('parseDiagramFile relations validation', () => {
     "relations": [
       { "from": "*.a", "to": "*.b", "line": "solid" },
       { "from": "*.c", "to": "*.d", "line": "dashed" },
-      { "from": "*.e", "to": "*.f", "line": "hidden" }
+      { "from": "*.e", "to": "*.f", "visible": false }
     ]
   }]
 }`;
@@ -799,7 +799,7 @@ describe('resolveRelation', () => {
       targetColumn: 'id',
     };
     const relations = [
-      { from: 'public.orders.created_by', to: 'public.users.id', line: 'hidden' },
+      { from: 'public.orders.created_by', to: 'public.users.id', visible: false },
     ];
 
     const result = resolveRelation(fk, relations);
@@ -815,7 +815,7 @@ describe('resolveRelation', () => {
       targetColumn: 'id',
     };
     const relations = [
-      { from: '*.created_by', to: 'public.users.id', line: 'hidden' },
+      { from: '*.created_by', to: 'public.users.id', visible: false },
     ];
 
     const result = resolveRelation(fk, relations);
@@ -847,7 +847,7 @@ describe('resolveRelation', () => {
       targetColumn: 'id',
     };
     const relations = [
-      { from: '*.created_by', to: '*.users.id', line: 'hidden' },
+      { from: '*.created_by', to: '*.users.id', visible: false },
     ];
 
     const result = resolveRelation(fk, relations);
@@ -895,7 +895,7 @@ describe('resolveRelation', () => {
       targetColumn: 'id',
     };
     const relations = [
-      { from: '*.created_by', to: '*', line: 'hidden' },
+      { from: '*.created_by', to: '*', visible: false },
       { from: '*', to: '*.users.id', color: '#ff0000' },
     ];
 
@@ -912,7 +912,7 @@ describe('resolveRelation', () => {
       targetColumn: 'id',
     };
     const relations = [
-      { from: '*.created_by', to: '*.users.id', line: 'hidden' },
+      { from: '*.created_by', to: '*.users.id', visible: false },
     ];
 
     const result = resolveRelation(fk, relations);
@@ -928,7 +928,7 @@ describe('resolveRelation', () => {
       targetColumn: 'id',
     };
     const relations = [
-      { from: '*_by', to: '*.id', line: 'hidden' },
+      { from: '*_by', to: '*.id', visible: false },
     ];
 
     const result = resolveRelation(fk, relations);

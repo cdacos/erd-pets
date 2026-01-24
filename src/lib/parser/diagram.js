@@ -191,6 +191,11 @@ function validateDiagramFile(data) {
           if ('color' in t && typeof t.color !== 'string') {
             errors.push({ message: `${tablePrefix}.color: must be a string` });
           }
+
+          // Validate optional visible
+          if ('visible' in t && typeof t.visible !== 'boolean') {
+            errors.push({ message: `${tablePrefix}.visible: must be a boolean` });
+          }
         }
       }
 
@@ -232,14 +237,19 @@ function validateDiagramFile(data) {
             if ('line' in r) {
               if (typeof r.line !== 'string') {
                 errors.push({ message: `${relPrefix}.line: must be a string` });
-              } else if (!['solid', 'dashed', 'hidden'].includes(r.line)) {
-                errors.push({ message: `${relPrefix}.line: must be "solid", "dashed", or "hidden"` });
+              } else if (!['solid', 'dashed'].includes(r.line)) {
+                errors.push({ message: `${relPrefix}.line: must be "solid" or "dashed"` });
               }
             }
 
             // Validate optional color
             if ('color' in r && typeof r.color !== 'string') {
               errors.push({ message: `${relPrefix}.color: must be a string` });
+            }
+
+            // Validate optional visible
+            if ('visible' in r && typeof r.visible !== 'boolean') {
+              errors.push({ message: `${relPrefix}.visible: must be a boolean` });
             }
           }
         }
@@ -354,6 +364,9 @@ export function resolveDiagramTables(diagram, tables, existingPositions) {
   // Track which tables we've added (to avoid duplicates)
   const addedTables = new Set();
 
+  // Track tables hidden by wildcards (can be overridden by explicit entries)
+  const hiddenByWildcard = new Set();
+
   // Process entries in order
   for (const entry of diagram.tables) {
     if (isWildcard(entry.name)) {
@@ -370,6 +383,17 @@ export function resolveDiagramTables(diagram, tables, existingPositions) {
       for (const qualifiedName of matchingTables) {
         // Skip if already added or if there's an explicit entry for this table
         if (addedTables.has(qualifiedName) || explicitNames.has(qualifiedName)) {
+          continue;
+        }
+
+        // If this wildcard hides tables, track them but don't add
+        if (entry.visible === false) {
+          hiddenByWildcard.add(qualifiedName);
+          continue;
+        }
+
+        // Skip if hidden by an earlier wildcard
+        if (hiddenByWildcard.has(qualifiedName)) {
           continue;
         }
 
@@ -409,6 +433,11 @@ export function resolveDiagramTables(diagram, tables, existingPositions) {
       }
 
       addedTables.add(entry.name);
+
+      // Skip if explicitly hidden
+      if (entry.visible === false) {
+        continue;
+      }
 
       // Determine position
       const existing = existingPositions?.get(entry.name);
@@ -510,7 +539,7 @@ export function resolveRelation(fk, relations) {
 
   for (const rule of relations) {
     if (matchesGlob(fromPath, rule.from) && matchesGlob(toPath, rule.to)) {
-      if (rule.line === 'hidden') {
+      if (rule.visible === false) {
         return { hidden: true };
       }
       return {
@@ -559,8 +588,11 @@ export function serializeDiagramFile(diagramFile, selectedDiagramId, nodePositio
 
       for (const entry of diagram.tables) {
         if (isWildcard(entry.name)) {
-          // Keep wildcard as-is
-          newTables.push({ name: entry.name });
+          // Keep wildcard as-is, preserving visible attribute
+          newTables.push({
+            name: entry.name,
+            ...(entry.visible === false ? { visible: false } : {}),
+          });
 
           // Add explicit positions for tables matched by this wildcard
           const matchingTables = expandWildcard(entry.name, tables);

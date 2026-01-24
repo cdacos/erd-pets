@@ -42,6 +42,7 @@ A diagram file references a single SQL schema file and contains one or more diag
 | `name` | string | yes | Fully qualified table name or wildcard pattern |
 | `x`, `y` | number | no | Position in pixels; omit for auto-placement |
 | `color` | string | no | Hex color for table header |
+| `visible` | boolean | no | Whether table is visible (default: `true`) |
 
 ### Wildcards
 
@@ -50,6 +51,22 @@ Table names support wildcard patterns:
 - `schema.prefix*` — tables starting with prefix
 
 Wildcards expand to matching tables at parse time. Tables matched by wildcards that lack explicit positions are auto-placed. Explicit entries override wildcard matches for the same table.
+
+### Hiding Tables
+
+Use `visible: false` to hide tables. This is useful with wildcards to show most tables but exclude specific ones:
+
+```jsonc
+"tables": [
+  { "name": "audit.*", "visible": false },  // Hide all audit tables
+  { "name": "audit.important", "x": 100 },  // But show this one (explicit overrides wildcard)
+  { "name": "*" }                           // Show all other tables
+]
+```
+
+Precedence rules:
+1. Explicit entries always win over wildcards
+2. An explicit entry (even without `visible`) overrides a wildcard's `visible: false`
 
 ### Validation
 
@@ -62,15 +79,16 @@ Wildcards expand to matching tables at parse time. Tables matched by wildcards t
 Style or hide FK edges based on pattern matching. Each entry matches relationships by their source (`from`) and target (`to`) columns.
 
 ```jsonc
-{ "from": "*.created_by", "to": "*.auth_user.id", "line": "hidden" }
+{ "from": "*.created_by", "to": "*.auth_user.id", "visible": false }
 ```
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `from` | string | yes | Glob pattern for source column (`schema.table.column`) |
 | `to` | string | yes | Glob pattern for target column (`schema.table.column`) |
-| `line` | string | no | `solid` (default), `dashed`, `hidden` |
+| `line` | string | no | `solid` (default), `dashed` |
 | `color` | string | no | Line color (hex) |
+| `visible` | boolean | no | Whether relation is visible (default: `true`) |
 
 ### Pattern Matching
 
@@ -92,8 +110,8 @@ Patterns match against the fully qualified column path: `schema.table.column`
 ```jsonc
 "relations": [
   // Hide all audit trail relationships
-  { "from": "*.created_by", "to": "*.auth_user.id", "line": "hidden" },
-  { "from": "*.updated_by", "to": "*.auth_user.id", "line": "hidden" },
+  { "from": "*.created_by", "to": "*.auth_user.id", "visible": false },
+  { "from": "*.updated_by", "to": "*.auth_user.id", "visible": false },
 
   // De-emphasize tenant relationships
   { "from": "*.tenant_id", "to": "*.tenant.id", "line": "dashed", "color": "#9ca3af" },
@@ -194,8 +212,8 @@ When saving:
         { "id": "c", "name": "contract.contract", "x": 100, "y": 50 }
       ],
       "relations": [
-        { "from": "*.created_by", "to": "*.user.id", "line": "hidden" },
-        { "from": "*.updated_by", "to": "*.user.id", "line": "hidden" }
+        { "from": "*.created_by", "to": "*.user.id", "visible": false },
+        { "from": "*.updated_by", "to": "*.user.id", "visible": false }
       ]
     }
   ]
