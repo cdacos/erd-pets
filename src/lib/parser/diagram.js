@@ -342,32 +342,24 @@ function expandWildcard(pattern, tables) {
 /**
  * Resolve diagram table entries against SQL tables.
  * Expands wildcards and validates explicit entries.
+ * Uses "last match wins" semantics - later entries override earlier ones.
  * @param {DiagramDefinition} diagram
  * @param {Table[]} tables
  * @param {Map<string, {x: number, y: number}>} [existingPositions] - Positions to preserve (for refresh)
  * @returns {{ resolved: ResolvedTableEntry[], errors: ParseError[] }}
  */
 export function resolveDiagramTables(diagram, tables, existingPositions) {
-  /** @type {ResolvedTableEntry[]} */
-  const resolved = [];
   /** @type {ParseError[]} */
   const errors = [];
 
   // Build a map of table qualified names for quick lookup
   const tableMap = new Map(tables.map((t) => [t.qualifiedName, t]));
 
-  // Track explicit entries (to skip from wildcard expansion)
-  const explicitNames = new Set(
-    diagram.tables.filter((t) => !isWildcard(t.name)).map((t) => t.name)
-  );
+  // Track table state: visibility and metadata (last match wins)
+  /** @type {Map<string, { visible: boolean, entry: DiagramTableEntry | null, fromWildcard: boolean, originalPattern?: string }>} */
+  const tableState = new Map();
 
-  // Track which tables we've added (to avoid duplicates)
-  const addedTables = new Set();
-
-  // Track tables hidden by wildcards (can be overridden by explicit entries)
-  const hiddenByWildcard = new Set();
-
-  // Process entries in order
+  // Process entries in order - later entries override earlier ones
   for (const entry of diagram.tables) {
     if (isWildcard(entry.name)) {
       // Expand wildcard
@@ -380,44 +372,15 @@ export function resolveDiagramTables(diagram, tables, existingPositions) {
         continue;
       }
 
+      const isVisible = entry.visible !== false;
+
       for (const qualifiedName of matchingTables) {
-        // Skip if already added or if there's an explicit entry for this table
-        if (addedTables.has(qualifiedName) || explicitNames.has(qualifiedName)) {
-          continue;
-        }
-
-        // If this wildcard hides tables, track them but don't add
-        if (entry.visible === false) {
-          hiddenByWildcard.add(qualifiedName);
-          continue;
-        }
-
-        // Skip if hidden by an earlier wildcard
-        if (hiddenByWildcard.has(qualifiedName)) {
-          continue;
-        }
-
-        addedTables.add(qualifiedName);
-
-        // Use existing position if available, otherwise generate random
-        const existing = existingPositions?.get(qualifiedName);
-        if (existing) {
-          resolved.push({
-            qualifiedName,
-            x: existing.x,
-            y: existing.y,
-            fromWildcard: true,
-            originalPattern: entry.name,
-          });
-        } else {
-          resolved.push({
-            qualifiedName,
-            x: Math.random() * 800 + 50,
-            y: Math.random() * 600 + 50,
-            fromWildcard: true,
-            originalPattern: entry.name,
-          });
-        }
+        tableState.set(qualifiedName, {
+          visible: isVisible,
+          entry: null, // Wildcard doesn't carry explicit position/color
+          fromWildcard: true,
+          originalPattern: entry.name,
+        });
       }
     } else {
       // Explicit entry
@@ -428,41 +391,47 @@ export function resolveDiagramTables(diagram, tables, existingPositions) {
         continue;
       }
 
-      if (addedTables.has(entry.name)) {
-        continue; // Already added (shouldn't happen normally)
-      }
-
-      addedTables.add(entry.name);
-
-      // Skip if explicitly hidden
-      if (entry.visible === false) {
-        continue;
-      }
-
-      // Determine position
-      const existing = existingPositions?.get(entry.name);
-      let x, y;
-
-      if (existing) {
-        x = existing.x;
-        y = existing.y;
-      } else if (typeof entry.x === 'number' && typeof entry.y === 'number') {
-        x = entry.x;
-        y = entry.y;
-      } else {
-        x = Math.random() * 800 + 50;
-        y = Math.random() * 600 + 50;
-      }
-
-      resolved.push({
-        qualifiedName: entry.name,
-        x,
-        y,
-        id: entry.id,
-        color: entry.color,
+      tableState.set(entry.name, {
+        visible: entry.visible !== false,
+        entry,
         fromWildcard: false,
       });
     }
+  }
+
+  // Build resolved array from visible tables
+  /** @type {ResolvedTableEntry[]} */
+  const resolved = [];
+
+  for (const [qualifiedName, state] of tableState) {
+    if (!state.visible) {
+      continue;
+    }
+
+    // Determine position
+    const existing = existingPositions?.get(qualifiedName);
+    let x, y;
+
+    if (existing) {
+      x = existing.x;
+      y = existing.y;
+    } else if (state.entry && typeof state.entry.x === 'number' && typeof state.entry.y === 'number') {
+      x = state.entry.x;
+      y = state.entry.y;
+    } else {
+      x = Math.random() * 800 + 50;
+      y = Math.random() * 600 + 50;
+    }
+
+    resolved.push({
+      qualifiedName,
+      x,
+      y,
+      id: state.entry?.id,
+      color: state.entry?.color,
+      fromWildcard: state.fromWildcard,
+      originalPattern: state.originalPattern,
+    });
   }
 
   return { resolved, errors };
