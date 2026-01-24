@@ -117,9 +117,17 @@ html.dark {
   --color-tooltip-value: #334155;
 }
 
-/* XyFlow dark mode overrides */
+/* XyFlow overrides */
+.svelte-flow {
+  --xy-background-color: var(--color-bg) !important;
+  background-color: var(--color-bg) !important;
+}
+
+.svelte-flow__renderer {
+  background-color: var(--color-bg) !important;
+}
+
 html.dark .svelte-flow {
-  --xy-background-color: var(--color-bg);
   --xy-node-background-color: var(--color-surface);
   --xy-node-border-color: var(--color-border);
   --xy-edge-stroke: var(--color-text-muted);
@@ -151,10 +159,5 @@ html.dark .svelte-flow__minimap-mask {
 
 html.dark .svelte-flow__minimap-node {
   fill: var(--color-surface-hover);
-  stroke: var(--color-border);
-}
-
-html.dark .svelte-flow__background pattern circle,
-html.dark .svelte-flow__background pattern line {
   stroke: var(--color-border);
 }

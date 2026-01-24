@@ -2,7 +2,6 @@
   import {
     SvelteFlow,
     Controls,
-    Background,
     MiniMap,
     MarkerType,
   } from '@xyflow/svelte';
@@ -821,7 +820,6 @@
       onnodedragstop={recalculateEdgeHandles}
     >
       <Controls />
-      <Background />
       <MiniMap />
     </SvelteFlow>
   </main>

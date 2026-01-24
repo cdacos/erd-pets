@@ -92,6 +92,7 @@
     <option value="rounded">Edges: Rounded</option>
     <option value="bezier">Edges: Bezier</option>
   </select>
+  <ThemeSelector />
   {#if diagramFileName || sqlFileName}
     <span class="file-names">
       {#if diagramFileName}<span class="file-name">{diagramFileName}</span>{/if}
@@ -111,7 +112,6 @@
       <option value="">No diagrams</option>
     {/if}
   </select>
-  <ThemeSelector />
 </header>
 
 <style>
