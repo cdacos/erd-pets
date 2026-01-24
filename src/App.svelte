@@ -14,6 +14,7 @@
   import ConfirmDialog from './lib/ConfirmDialog.svelte';
   import TableListPanel from './lib/TableListPanel.svelte';
   import { circularLayout } from './lib/layouts/circular.js';
+  import { hierarchicalLayout } from './lib/layouts/hierarchical.js';
   import {
     openDiagramFile,
     openSqlFile,
@@ -644,6 +645,9 @@
     switch (pendingLayout) {
       case 'circular':
         newPositions = circularLayout(nodes);
+        break;
+      case 'hierarchical':
+        newPositions = hierarchicalLayout(nodes, edges);
         break;
       default:
         showToast(`Unknown layout: ${pendingLayout}`, 'error');

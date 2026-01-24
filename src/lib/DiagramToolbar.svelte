@@ -3,7 +3,7 @@
 
   /**
    * @typedef {import('./parser/types.js').DiagramDefinition} DiagramDefinition
-   * @typedef {'circular'} LayoutType
+   * @typedef {'circular' | 'hierarchical'} LayoutType
    * @typedef {'rounded' | 'bezier'} EdgeStyle
    */
 
@@ -30,6 +30,7 @@
   /** @type {LayoutType[]} */
   const layoutOptions = [
     'circular',
+    'hierarchical',
   ];
 
   /**
