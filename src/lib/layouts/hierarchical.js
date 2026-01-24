@@ -1,6 +1,7 @@
 /**
  * Hierarchical (Sugiyama) layout algorithm.
  * Arranges nodes in layers based on FK relationships, with parent tables on the left.
+ * Automatically groups by schema when multiple schemas are present.
  */
 
 /**
@@ -11,14 +12,26 @@
 
 /**
  * @typedef {Object} HierarchicalOptions
- * @property {number} [layerSpacing] - Horizontal spacing between layers (default: 350)
- * @property {number} [nodeSpacing] - Vertical spacing between nodes in a layer (default: 150)
+ * @property {number} [layerSpacing] - Horizontal spacing between layers (default: 675)
+ * @property {number} [nodeSpacing] - Vertical spacing between nodes in a layer (default: 300)
+ * @property {number} [schemaSpacing] - Spacing between schema groups (default: 500)
  * @property {number} [maxIterations] - Max barycenter iterations (default: 24)
  */
 
 /**
+ * Extract schema name from qualified table name.
+ * @param {string} qualifiedName - Format: "schema.table"
+ * @returns {string} Schema name
+ */
+function getSchema(qualifiedName) {
+  const dotIndex = qualifiedName.indexOf('.');
+  return dotIndex >= 0 ? qualifiedName.substring(0, dotIndex) : 'public';
+}
+
+/**
  * Apply hierarchical layout to nodes based on FK edges.
  * Uses Sugiyama framework: cycle removal, layer assignment, crossing minimization.
+ * Automatically groups by schema when multiple schemas are detected.
  *
  * @param {Array<{id: string, position: {x: number, y: number}}>} nodes
  * @param {Edge[]} edges - FK edges where source=child (has FK), target=parent (referenced)
@@ -32,20 +45,94 @@ export function hierarchicalLayout(nodes, edges, options = {}) {
 
   const layerSpacing = options.layerSpacing ?? 675;
   const nodeSpacing = options.nodeSpacing ?? 300;
+  const schemaSpacing = options.schemaSpacing ?? 500;
   const maxIterations = options.maxIterations ?? 24;
 
+  // Group nodes by schema
+  /** @type {Map<string, Array<{id: string, position: {x: number, y: number}}>>} */
+  const schemaGroups = new Map();
+  for (const node of nodes) {
+    const schema = getSchema(node.id);
+    if (!schemaGroups.has(schema)) {
+      schemaGroups.set(schema, []);
+    }
+    schemaGroups.get(schema)?.push(node);
+  }
+
+  // If single schema, use simple layout
+  if (schemaGroups.size === 1) {
+    return layoutSingleGroup(nodes, edges, layerSpacing, nodeSpacing, maxIterations, 50, 50);
+  }
+
+  // Multiple schemas: layout each independently, then arrange groups horizontally
+  /** @type {Map<string, {x: number, y: number}>} */
+  const allPositions = new Map();
+
+  // Sort schemas alphabetically for consistent ordering
+  const schemas = [...schemaGroups.keys()].sort((a, b) => a.localeCompare(b));
+
+  let currentX = 50;
+
+  for (const schema of schemas) {
+    const schemaNodes = schemaGroups.get(schema) ?? [];
+    const schemaNodeIds = new Set(schemaNodes.map((n) => n.id));
+
+    // Filter edges to only those within this schema
+    const schemaEdges = edges.filter(
+      (e) => schemaNodeIds.has(e.source) && schemaNodeIds.has(e.target)
+    );
+
+    // Layout this schema group
+    const groupPositions = layoutSingleGroup(
+      schemaNodes,
+      schemaEdges,
+      layerSpacing,
+      nodeSpacing,
+      maxIterations,
+      currentX,
+      50
+    );
+
+    // Find the width of this group
+    let maxX = currentX;
+    for (const pos of groupPositions.values()) {
+      maxX = Math.max(maxX, pos.x);
+    }
+
+    // Merge positions
+    for (const [id, pos] of groupPositions) {
+      allPositions.set(id, pos);
+    }
+
+    // Move to next column with spacing (estimate node width ~250px)
+    currentX = maxX + 250 + schemaSpacing;
+  }
+
+  return allPositions;
+}
+
+/**
+ * Layout a single group of nodes (single schema or entire diagram).
+ * @param {Array<{id: string, position: {x: number, y: number}}>} nodes
+ * @param {Edge[]} edges
+ * @param {number} layerSpacing
+ * @param {number} nodeSpacing
+ * @param {number} maxIterations
+ * @param {number} startX
+ * @param {number} startY
+ * @returns {Map<string, {x: number, y: number}>}
+ */
+function layoutSingleGroup(nodes, edges, layerSpacing, nodeSpacing, maxIterations, startX, startY) {
   const nodeIds = new Set(nodes.map((n) => n.id));
 
-  // Filter edges to only those where both nodes exist in diagram
+  // Filter edges to only those where both nodes exist
   const validEdges = edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
 
   // Build adjacency: parent -> children and child -> parents
-  // Edge direction: source (child) -> target (parent)
-  // For layers: parents should be on left (layer 0), children on right
   /** @type {Map<string, Set<string>>} */
-  const parents = new Map(); // node -> set of parent nodes
+  const parents = new Map();
   /** @type {Map<string, Set<string>>} */
-  const children = new Map(); // node -> set of child nodes
+  const children = new Map();
 
   for (const id of nodeIds) {
     parents.set(id, new Set());
@@ -57,27 +144,17 @@ export function hierarchicalLayout(nodes, edges, options = {}) {
     children.get(edge.target)?.add(edge.source);
   }
 
-  // Step 1: Cycle removal using DFS - find and mark back edges
-  const reversedEdges = removeCycles(nodeIds, parents, children);
+  // Step 1: Cycle removal
+  removeCycles(nodeIds, parents, children);
 
-  // Step 2: Layer assignment - BFS from roots (nodes with no parents)
+  // Step 2: Layer assignment
   const layers = assignLayers(nodeIds, parents);
 
-  // Step 3: Crossing minimization using barycenter heuristic
+  // Step 3: Crossing minimization
   const orderedLayers = minimizeCrossings(layers, parents, children, maxIterations);
 
   // Step 4: Coordinate assignment
-  const positions = assignCoordinates(orderedLayers, layerSpacing, nodeSpacing);
-
-  // Restore reversed edges (not needed for positions, but good practice)
-  for (const [source, target] of reversedEdges) {
-    parents.get(source)?.add(target);
-    parents.get(target)?.delete(source);
-    children.get(target)?.add(source);
-    children.get(source)?.delete(target);
-  }
-
-  return positions;
+  return assignCoordinates(orderedLayers, layerSpacing, nodeSpacing, startX, startY);
 }
 
 /**
@@ -351,9 +428,11 @@ function minimizeCrossings(layers, parents, children, maxIterations) {
  * @param {string[][]} layers
  * @param {number} layerSpacing
  * @param {number} nodeSpacing
+ * @param {number} [startX=50]
+ * @param {number} [startY=50]
  * @returns {Map<string, {x: number, y: number}>}
  */
-function assignCoordinates(layers, layerSpacing, nodeSpacing) {
+function assignCoordinates(layers, layerSpacing, nodeSpacing, startX = 50, startY = 50) {
   /** @type {Map<string, {x: number, y: number}>} */
   const positions = new Map();
 
@@ -362,12 +441,12 @@ function assignCoordinates(layers, layerSpacing, nodeSpacing) {
 
   for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
     const layer = layers[layerIndex];
-    const x = layerIndex * layerSpacing + 50; // Start at x=50
+    const x = layerIndex * layerSpacing + startX;
 
     // Center this layer vertically relative to the largest layer
     const layerHeight = (layer.length - 1) * nodeSpacing;
     const maxHeight = (maxLayerSize - 1) * nodeSpacing;
-    const yOffset = (maxHeight - layerHeight) / 2 + 50; // Start at y=50
+    const yOffset = (maxHeight - layerHeight) / 2 + startY;
 
     for (let nodeIndex = 0; nodeIndex < layer.length; nodeIndex++) {
       const id = layer[nodeIndex];
