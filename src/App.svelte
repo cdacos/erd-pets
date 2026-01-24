@@ -8,6 +8,7 @@
   } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
   import TableNode from './lib/TableNode.svelte';
+  import TooltipEdge from './lib/TooltipEdge.svelte';
   import Toast from './lib/Toast.svelte';
   import DiagramToolbar from './lib/DiagramToolbar.svelte';
   import ConfirmDialog from './lib/ConfirmDialog.svelte';
@@ -31,6 +32,10 @@
 
   const nodeTypes = {
     table: TableNode,
+  };
+
+  const edgeTypes = {
+    tooltip: TooltipEdge,
   };
 
   /** @type {FileSystemFileHandle | null} */
@@ -173,7 +178,7 @@
           target: fk.targetTable,
           sourceHandle: handles.sourceHandle,
           targetHandle: handles.targetHandle,
-          type: 'default',
+          type: 'tooltip',
           markerEnd: { type: MarkerType.ArrowClosed, width: 25, height: 25 },
           data: { sourceColumn: fk.sourceColumn, targetColumn: fk.targetColumn },
         };
@@ -256,7 +261,7 @@
           target: fk.targetTable,
           sourceHandle: handles.sourceHandle,
           targetHandle: handles.targetHandle,
-          type: 'default',
+          type: 'tooltip',
           style,
           markerEnd: {
             type: MarkerType.ArrowClosed,
@@ -670,6 +675,7 @@
       bind:nodes
       bind:edges
       {nodeTypes}
+      {edgeTypes}
       fitView
       onnodedragstop={recalculateEdgeHandles}
     >
