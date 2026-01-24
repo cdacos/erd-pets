@@ -5,8 +5,6 @@
     Background,
     MiniMap,
     MarkerType,
-    getNodesBounds,
-    getViewportForBounds,
   } from '@xyflow/svelte';
   import { toPng, toSvg } from 'html-to-image';
   import '@xyflow/svelte/dist/style.css';
@@ -670,6 +668,50 @@
   }
 
   /**
+   * Get bounds of all nodes in flow coordinates, using actual rendered dimensions.
+   * @returns {{ x: number, y: number, width: number, height: number } | null}
+   */
+  function getNodesBoundsWithDimensions() {
+    if (nodes.length === 0) return null;
+
+    // Get current zoom level from viewport transform
+    const viewport = document.querySelector('.svelte-flow__viewport');
+    if (!viewport) return null;
+
+    const transform = viewport.style.transform;
+    const scaleMatch = transform.match(/scale\(([^)]+)\)/);
+    const zoom = scaleMatch ? parseFloat(scaleMatch[1]) : 1;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const node of nodes) {
+      // Get actual rendered dimensions from DOM, adjusted for zoom
+      const nodeEl = document.querySelector(`[data-id="${node.id}"]`);
+      if (!nodeEl) continue;
+
+      const rect = nodeEl.getBoundingClientRect();
+      const width = rect.width / zoom;
+      const height = rect.height / zoom;
+
+      // Use flow coordinates from node position
+      minX = Math.min(minX, node.position.x);
+      minY = Math.min(minY, node.position.y);
+      maxX = Math.max(maxX, node.position.x + width);
+      maxY = Math.max(maxY, node.position.y + height);
+    }
+
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+    };
+  }
+
+  /**
    * Export diagram as PNG image.
    */
   async function handleExportPng() {
@@ -679,26 +721,23 @@
     }
 
     try {
-      const nodesBounds = getNodesBounds(nodes);
-      const padding = 50;
+      const nodesBounds = getNodesBoundsWithDimensions();
+      if (!nodesBounds) {
+        showToast('Failed to calculate diagram bounds.', 'error');
+        return;
+      }
+
+      const padding = 30;
       const imageWidth = nodesBounds.width + padding * 2;
       const imageHeight = nodesBounds.height + padding * 2;
 
-      const viewport = getViewportForBounds(
-        nodesBounds,
-        imageWidth,
-        imageHeight,
-        0.5,
-        2.0,
-        padding
-      );
-
       const viewportElement = document.querySelector('.svelte-flow__viewport');
-      if (!viewportElement || !viewport) {
+      if (!viewportElement) {
         showToast('Failed to capture diagram.', 'error');
         return;
       }
 
+      // Translate to position content at (padding, padding), no scaling
       const dataUrl = await toPng(viewportElement, {
         backgroundColor: '#fafafa',
         width: imageWidth,
@@ -706,7 +745,7 @@
         style: {
           width: `${imageWidth}px`,
           height: `${imageHeight}px`,
-          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+          transform: `translate(${-nodesBounds.x + padding}px, ${-nodesBounds.y + padding}px)`,
         },
       });
 
@@ -731,26 +770,23 @@
     }
 
     try {
-      const nodesBounds = getNodesBounds(nodes);
-      const padding = 50;
+      const nodesBounds = getNodesBoundsWithDimensions();
+      if (!nodesBounds) {
+        showToast('Failed to calculate diagram bounds.', 'error');
+        return;
+      }
+
+      const padding = 30;
       const imageWidth = nodesBounds.width + padding * 2;
       const imageHeight = nodesBounds.height + padding * 2;
 
-      const viewport = getViewportForBounds(
-        nodesBounds,
-        imageWidth,
-        imageHeight,
-        0.5,
-        2.0,
-        padding
-      );
-
       const viewportElement = document.querySelector('.svelte-flow__viewport');
-      if (!viewportElement || !viewport) {
+      if (!viewportElement) {
         showToast('Failed to capture diagram.', 'error');
         return;
       }
 
+      // Translate to position content at (padding, padding), no scaling
       const dataUrl = await toSvg(viewportElement, {
         backgroundColor: '#fafafa',
         width: imageWidth,
@@ -758,7 +794,7 @@
         style: {
           width: `${imageWidth}px`,
           height: `${imageHeight}px`,
-          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+          transform: `translate(${-nodesBounds.x + padding}px, ${-nodesBounds.y + padding}px)`,
         },
       });
 
