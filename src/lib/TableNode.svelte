@@ -16,6 +16,9 @@
   function getColumnTop(index) {
     return HEADER_HEIGHT + COLUMNS_TOP_PADDING + index * COLUMN_HEIGHT + COLUMN_HEIGHT / 2;
   }
+
+  // Build header style with optional custom color
+  let headerStyle = $derived(data.color ? `background-color: ${data.color};` : '');
 </script>
 
 <!-- Per-column handles on left and right edges -->
@@ -47,7 +50,7 @@
 {/each}
 
 <div class="table-node">
-  <div class="table-header">{data.label}</div>
+  <div class="table-header" style={headerStyle}>{data.label}</div>
   <div class="table-columns">
     {#each data.columns as column}
       <div class="column">

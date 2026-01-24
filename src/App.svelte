@@ -13,6 +13,7 @@
   import DiagramToolbar from './lib/DiagramToolbar.svelte';
   import ConfirmDialog from './lib/ConfirmDialog.svelte';
   import TableListPanel from './lib/TableListPanel.svelte';
+  import ContextMenu from './lib/ContextMenu.svelte';
   import { circularLayout } from './lib/layouts/circular.js';
   import { hierarchicalLayout } from './lib/layouts/hierarchical.js';
   import {
@@ -87,6 +88,14 @@
   let edgeStyle = $state('rounded');
 
   let showTableList = $state(false);
+
+  /** @type {{ x: number, y: number, tableNames: string[] } | null} */
+  let contextMenu = $state(null);
+
+  /** @type {string[]} */
+  let selectedTableNames = $derived(
+    nodes.filter((n) => n.selected).map((n) => n.id)
+  );
 
   /** @type {Set<string>} */
   let visibleTableNames = $derived(new Set(nodes.map((n) => n.id)));
@@ -168,6 +177,112 @@
    */
   function dismissToast(id) {
     toasts = toasts.filter((t) => t.id !== id);
+  }
+
+  /**
+   * Handle right-click on a node.
+   * @param {{ event: MouseEvent, node: { id: string } }} param
+   */
+  /**
+   * Handle right-click on a single node.
+   * @param {{ event: MouseEvent, node: { id: string } }} param
+   */
+  function handleNodeContextMenu({ event, node }) {
+    event.preventDefault();
+    const tableName = node.id;
+    // If the clicked table is part of a selection, use all selected tables
+    // Otherwise just use the clicked table
+    const tableNames = selectedTableNames.includes(tableName)
+      ? selectedTableNames
+      : [tableName];
+    contextMenu = { x: event.clientX, y: event.clientY, tableNames };
+  }
+
+  /**
+   * Handle right-click on a selection of nodes.
+   * @param {{ event: MouseEvent, nodes: Array<{ id: string }> }} param
+   */
+  function handleSelectionContextMenu({ event, nodes: selectedNodes }) {
+    event.preventDefault();
+    const tableNames = selectedNodes.map((n) => n.id);
+    if (tableNames.length > 0) {
+      contextMenu = { x: event.clientX, y: event.clientY, tableNames };
+    }
+  }
+
+  /**
+   * Close the context menu.
+   */
+  function closeContextMenu() {
+    contextMenu = null;
+  }
+
+  /**
+   * Get the current color for table(s) from the diagram file.
+   * Returns the common color if all tables have the same color, undefined if mixed.
+   * @param {string[]} tableNames
+   * @returns {string | undefined}
+   */
+  function getTableColor(tableNames) {
+    if (!diagramFile || !selectedDiagramId || tableNames.length === 0) return undefined;
+    const diagram = diagramFile.diagrams.find((d) => d.id === selectedDiagramId);
+    if (!diagram) return undefined;
+
+    const colors = tableNames.map((name) => {
+      const tableEntry = diagram.tables.find((t) => t.name === name);
+      return tableEntry?.color;
+    });
+
+    // Return color only if all tables have the same color
+    const firstColor = colors[0];
+    return colors.every((c) => c === firstColor) ? firstColor : undefined;
+  }
+
+  /**
+   * Handle color change for one or more tables.
+   * @param {string[]} tableNames
+   * @param {string | undefined} color
+   */
+  function handleTableColorChange(tableNames, color) {
+    if (!diagramFile || !selectedDiagramId || !parseResult) return;
+
+    const diagramIndex = diagramFile.diagrams.findIndex((d) => d.id === selectedDiagramId);
+    if (diagramIndex === -1) return;
+
+    const diagram = diagramFile.diagrams[diagramIndex];
+    let updatedTables = [...diagram.tables];
+
+    for (const tableName of tableNames) {
+      const tableIndex = updatedTables.findIndex((t) => t.name === tableName);
+
+      if (tableIndex === -1) {
+        // Table not in diagram (using wildcard), add explicit entry
+        updatedTables.push({ name: tableName, color });
+      } else {
+        // Update existing entry
+        if (color === undefined) {
+          // Remove color property
+          const { color: _, ...rest } = updatedTables[tableIndex];
+          updatedTables[tableIndex] = rest;
+        } else {
+          updatedTables[tableIndex] = { ...updatedTables[tableIndex], color };
+        }
+      }
+    }
+
+    // Update diagram file
+    const updatedDiagrams = [...diagramFile.diagrams];
+    updatedDiagrams[diagramIndex] = { ...diagram, tables: updatedTables };
+    diagramFile = { ...diagramFile, diagrams: updatedDiagrams };
+
+    // Preserve positions and re-render
+    const existingPositions = getNodePositions();
+    convertToFlowWithDiagram(
+      updatedDiagrams[diagramIndex],
+      parseResult.tables,
+      parseResult.foreignKeys,
+      existingPositions
+    );
   }
 
   /**
@@ -274,6 +389,7 @@
         position: { x: pos.x, y: pos.y },
         data: {
           label: pos.qualifiedName,
+          color: pos.color,
           columns: table?.columns.map((col) => ({
             name: col.name,
             type: col.type,
@@ -885,6 +1001,9 @@
         {edgeTypes}
         fitView
         onnodedragstop={recalculateEdgeHandles}
+        onnodecontextmenu={handleNodeContextMenu}
+        onselectioncontextmenu={handleSelectionContextMenu}
+        onpaneclick={closeContextMenu}
       >
         <Controls />
         <MiniMap />
@@ -894,6 +1013,17 @@
 </div>
 
 <Toast {toasts} onDismiss={dismissToast} />
+
+{#if contextMenu}
+  <ContextMenu
+    x={contextMenu.x}
+    y={contextMenu.y}
+    tableNames={contextMenu.tableNames}
+    currentColor={getTableColor(contextMenu.tableNames)}
+    onColorChange={(color) => handleTableColorChange(contextMenu.tableNames, color)}
+    onClose={closeContextMenu}
+  />
+{/if}
 
 <ConfirmDialog
   open={showLayoutConfirm}
