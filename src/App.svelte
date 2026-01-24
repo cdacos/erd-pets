@@ -9,21 +9,33 @@
   import '@xyflow/svelte/dist/style.css';
   import TableNode from './lib/TableNode.svelte';
   import Toast from './lib/Toast.svelte';
-  import { openSqlFile, saveToFile, isFileSystemAccessSupported } from './lib/file.js';
+  import DiagramToolbar from './lib/DiagramToolbar.svelte';
+  import {
+    openDiagramFile,
+    openSqlFile,
+    refreshFiles,
+    saveToFile,
+    isFileSystemAccessSupported,
+  } from './lib/fileManager.js';
   import { parsePostgresSQL } from './lib/parser/postgres.js';
   import {
-    parseErdPets,
-    resolveDiagram,
-    generateErdPetsContent,
-    updateSqlWithErdPets,
-  } from './lib/parser/erdpets.js';
+    parseDiagramFile,
+    resolveDiagramTables,
+    serializeDiagramFile,
+  } from './lib/parser/diagram.js';
 
   const nodeTypes = {
     table: TableNode,
   };
 
   /** @type {FileSystemFileHandle | null} */
-  let fileHandle = $state(null);
+  let diagramHandle = $state(null);
+
+  /** @type {FileSystemFileHandle | null} */
+  let sqlHandle = $state(null);
+
+  /** @type {string} */
+  let diagramContent = $state('');
 
   /** @type {string} */
   let sqlContent = $state('');
@@ -36,16 +48,16 @@
   let nodes = $state.raw([]);
   let edges = $state.raw([]);
 
-  /** @type {import('./lib/parser/types.js').ErdPetsBlock | null} */
-  let erdPetsBlock = $state(null);
+  /** @type {import('./lib/parser/types.js').DiagramFile | null} */
+  let diagramFile = $state(null);
 
   /** @type {string} */
-  let selectedDiagram = $state('');
+  let selectedDiagramId = $state('');
 
   /** @type {import('./lib/parser/types.js').ParseResult | null} */
   let parseResult = $state(null);
 
-  let diagramNames = $derived(erdPetsBlock?.diagrams.map((d) => d.name) ?? []);
+  let diagrams = $derived(diagramFile?.diagrams ?? []);
 
   /**
    * Determine the best handles for connecting two nodes based on their positions.
@@ -156,14 +168,14 @@
   }
 
   /**
-   * Convert using diagram positions from @erd-pets block.
-   * @param {import('./lib/parser/types.js').Diagram} diagram
+   * Convert using diagram positions from diagram file.
+   * @param {import('./lib/parser/types.js').DiagramDefinition} diagram
    * @param {import('./lib/parser/types.js').Table[]} tables
    * @param {import('./lib/parser/types.js').ForeignKey[]} foreignKeys
    * @param {Map<string, {x: number, y: number}>} [existingPositions]
    */
   function convertToFlowWithDiagram(diagram, tables, foreignKeys, existingPositions) {
-    const { resolved, errors } = resolveDiagram(diagram, tables, existingPositions);
+    const { resolved, errors } = resolveDiagramTables(diagram, tables, existingPositions);
 
     // Show resolution errors
     for (const error of errors) {
@@ -255,18 +267,20 @@
 
   /**
    * Handle diagram selection change.
+   * @param {string} newDiagramId
    */
-  function handleDiagramChange() {
-    if (!parseResult || !erdPetsBlock) return;
+  function handleDiagramChange(newDiagramId) {
+    if (!parseResult || !diagramFile) return;
 
-    const diagram = erdPetsBlock.diagrams.find((d) => d.name === selectedDiagram);
+    selectedDiagramId = newDiagramId;
+    const diagram = diagramFile.diagrams.find((d) => d.id === newDiagramId);
     if (diagram) {
       convertToFlowWithDiagram(diagram, parseResult.tables, parseResult.foreignKeys);
     }
   }
 
   /**
-   * Handle Load SQL button click.
+   * Handle Load Diagram button click.
    */
   async function handleLoad() {
     if (!isFileSystemAccessSupported()) {
@@ -278,43 +292,53 @@
     }
 
     try {
-      const result = await openSqlFile();
-      fileHandle = result.handle;
-      sqlContent = result.content;
+      // Step 1: Open diagram file
+      const diagramResult = await openDiagramFile();
+      diagramHandle = diagramResult.handle;
+      diagramContent = diagramResult.content;
 
-      parseResult = parsePostgresSQL(sqlContent);
+      // Step 2: Parse diagram file
+      const { data: parsedDiagram, errors: diagramErrors } = parseDiagramFile(diagramContent);
 
-      // Show parse errors as warnings
-      if (parseResult.errors.length > 0) {
-        for (const error of parseResult.errors) {
-          showToast(error.message || error, 'error');
+      if (diagramErrors.length > 0) {
+        for (const error of diagramErrors) {
+          showToast(error.message, 'error');
         }
       }
 
-      // Parse @erd-pets block
-      erdPetsBlock = parseErdPets(sqlContent);
+      if (!parsedDiagram) {
+        showToast('Failed to parse diagram file.', 'error');
+        return;
+      }
 
-      if (erdPetsBlock) {
-        // Show erdpets parse errors
-        for (const error of erdPetsBlock.errors) {
-          showToast(error.message, 'error');
+      diagramFile = parsedDiagram;
+
+      // Step 3: Prompt user to open SQL file (picker starts in same directory as diagram)
+      showToast(`Please select: ${parsedDiagram.sql}`, 'info');
+
+      const sqlResult = await openSqlFile(diagramHandle);
+      sqlHandle = sqlResult.handle;
+      sqlContent = sqlResult.content;
+
+      // Step 4: Parse SQL
+      parseResult = parsePostgresSQL(sqlContent);
+
+      if (parseResult.errors.length > 0) {
+        for (const error of parseResult.errors) {
+          showToast(error.message || String(error), 'error');
         }
+      }
 
-        // Select first diagram
-        selectedDiagram = erdPetsBlock.diagrams[0]?.name ?? '';
+      // Step 5: Select first diagram and render
+      selectedDiagramId = diagramFile.diagrams[0]?.id ?? '';
 
-        if (selectedDiagram) {
-          const diagram = erdPetsBlock.diagrams.find((d) => d.name === selectedDiagram);
-          if (diagram) {
-            convertToFlowWithDiagram(diagram, parseResult.tables, parseResult.foreignKeys);
-          }
-        } else {
-          // No diagrams in block, show all tables
-          convertToFlow(parseResult.tables, parseResult.foreignKeys);
+      if (selectedDiagramId) {
+        const diagram = diagramFile.diagrams.find((d) => d.id === selectedDiagramId);
+        if (diagram) {
+          convertToFlowWithDiagram(diagram, parseResult.tables, parseResult.foreignKeys);
         }
       } else {
-        // No @erd-pets block, show all tables in grid layout
-        selectedDiagram = '';
+        // No diagrams, show all tables
         convertToFlow(parseResult.tables, parseResult.foreignKeys);
       }
 
@@ -336,8 +360,8 @@
    * Handle Save button click.
    */
   async function handleSave() {
-    if (!fileHandle) {
-      showToast('No file loaded. Use Load SQL first.', 'error');
+    if (!diagramHandle || !diagramFile) {
+      showToast('No file loaded. Use Load Diagram first.', 'error');
       return;
     }
 
@@ -345,52 +369,25 @@
       // Collect positions from nodes
       const nodePositions = getNodePositions();
 
-      // Generate updated block content
-      let newContent;
-      if (erdPetsBlock && erdPetsBlock.diagrams.length > 0) {
-        newContent = generateErdPetsContent(
-          erdPetsBlock.diagrams,
-          nodePositions,
-          selectedDiagram,
-          parseResult?.tables ?? []
-        );
-      } else if (parseResult && parseResult.tables.length > 0) {
-        // No existing diagrams - create a new "main" diagram with all tables
-        /** @type {import('./lib/parser/types.js').DiagramEntry[]} */
-        const entries = parseResult.tables.map((t) => ({
-          kind: /** @type {const} */ ('explicit'),
-          pattern: t.qualifiedName,
-          x: nodePositions.get(t.qualifiedName)?.x ?? 0,
-          y: nodePositions.get(t.qualifiedName)?.y ?? 0,
-          line: 0,
-        }));
-        const newDiagram = { name: 'main', entries };
-        newContent = generateErdPetsContent([newDiagram], nodePositions, 'main', parseResult.tables);
+      // Serialize diagram file with updated positions
+      const newContent = serializeDiagramFile(
+        diagramFile,
+        selectedDiagramId,
+        nodePositions,
+        parseResult?.tables ?? []
+      );
 
-        // Update erdPetsBlock for future saves
-        erdPetsBlock = {
-          diagrams: [newDiagram],
-          errors: [],
-          startOffset: 0,
-          endOffset: 0,
-        };
-        selectedDiagram = 'main';
-      } else {
-        // No tables - just save original
-        await saveToFile(fileHandle, sqlContent);
-        showToast('File saved.', 'success');
-        return;
+      // Save to diagram file (SQL file is not modified)
+      await saveToFile(diagramHandle, newContent);
+      diagramContent = newContent;
+
+      // Re-parse to update state
+      const { data } = parseDiagramFile(newContent);
+      if (data) {
+        diagramFile = data;
       }
 
-      // Update SQL with new block
-      const updatedSql = updateSqlWithErdPets(sqlContent, newContent, erdPetsBlock);
-      await saveToFile(fileHandle, updatedSql);
-      sqlContent = updatedSql;
-
-      // Re-parse to update offsets
-      erdPetsBlock = parseErdPets(sqlContent);
-
-      showToast('File saved with diagram positions.', 'success');
+      showToast('Diagram saved.', 'success');
     } catch (err) {
       showToast(err.message || 'Failed to save file.', 'error');
     }
@@ -400,62 +397,69 @@
    * Handle Refresh button click.
    */
   async function handleRefresh() {
-    if (!fileHandle) {
-      showToast('No file loaded. Use Load SQL first.', 'error');
+    if (!diagramHandle || !sqlHandle) {
+      showToast('No file loaded. Use Load Diagram first.', 'error');
       return;
     }
 
     try {
       // Preserve current positions for stability
       const existingPositions = getNodePositions();
-      const previousDiagram = selectedDiagram;
+      const previousDiagramId = selectedDiagramId;
 
-      const file = await fileHandle.getFile();
-      sqlContent = await file.text();
+      // Refresh both files
+      const refreshed = await refreshFiles(diagramHandle, sqlHandle);
+      diagramContent = refreshed.diagramContent;
+      sqlContent = refreshed.sqlContent;
 
+      // Re-parse diagram file
+      const { data: parsedDiagram, errors: diagramErrors } = parseDiagramFile(diagramContent);
+
+      if (diagramErrors.length > 0) {
+        for (const error of diagramErrors) {
+          showToast(error.message, 'error');
+        }
+      }
+
+      if (!parsedDiagram) {
+        showToast('Failed to parse diagram file.', 'error');
+        return;
+      }
+
+      diagramFile = parsedDiagram;
+
+      // Re-parse SQL
       parseResult = parsePostgresSQL(sqlContent);
 
       if (parseResult.errors.length > 0) {
         for (const error of parseResult.errors) {
-          showToast(error.message || error, 'error');
+          showToast(error.message || String(error), 'error');
         }
       }
 
-      // Re-parse @erd-pets block
-      erdPetsBlock = parseErdPets(sqlContent);
+      // Try to preserve selected diagram, or fall back to first
+      const diagramExists = diagramFile.diagrams.some((d) => d.id === previousDiagramId);
+      selectedDiagramId = diagramExists
+        ? previousDiagramId
+        : (diagramFile.diagrams[0]?.id ?? '');
 
-      if (erdPetsBlock) {
-        for (const error of erdPetsBlock.errors) {
-          showToast(error.message, 'error');
-        }
-
-        // Try to preserve selected diagram, or fall back to first
-        const diagramExists = erdPetsBlock.diagrams.some((d) => d.name === previousDiagram);
-        selectedDiagram = diagramExists
-          ? previousDiagram
-          : (erdPetsBlock.diagrams[0]?.name ?? '');
-
-        if (selectedDiagram) {
-          const diagram = erdPetsBlock.diagrams.find((d) => d.name === selectedDiagram);
-          if (diagram) {
-            convertToFlowWithDiagram(
-              diagram,
-              parseResult.tables,
-              parseResult.foreignKeys,
-              existingPositions
-            );
-          }
-        } else {
-          convertToFlow(parseResult.tables, parseResult.foreignKeys);
+      if (selectedDiagramId) {
+        const diagram = diagramFile.diagrams.find((d) => d.id === selectedDiagramId);
+        if (diagram) {
+          convertToFlowWithDiagram(
+            diagram,
+            parseResult.tables,
+            parseResult.foreignKeys,
+            existingPositions
+          );
         }
       } else {
-        selectedDiagram = '';
         convertToFlow(parseResult.tables, parseResult.foreignKeys);
       }
 
-      showToast('Refreshed from file.', 'success');
+      showToast('Refreshed from files.', 'success');
     } catch (err) {
-      showToast(err.message || 'Failed to refresh file.', 'error');
+      showToast(err.message || 'Failed to refresh files.', 'error');
     }
   }
 
@@ -483,19 +487,15 @@
 </script>
 
 <div class="app">
-  <header>
-    <button onclick={handleLoad}>Load SQL</button>
-    <button onclick={handleRefresh} disabled={!fileHandle}>Refresh</button>
-    <button onclick={handleSave} disabled={!fileHandle}>Save</button>
-    <select bind:value={selectedDiagram} onchange={handleDiagramChange} disabled={diagramNames.length === 0}>
-      {#each diagramNames as name}
-        <option value={name}>{name}</option>
-      {/each}
-      {#if diagramNames.length === 0}
-        <option value="">No diagrams</option>
-      {/if}
-    </select>
-  </header>
+  <DiagramToolbar
+    onLoad={handleLoad}
+    onRefresh={handleRefresh}
+    onSave={handleSave}
+    onDiagramChange={handleDiagramChange}
+    {diagrams}
+    selectedDiagramId={selectedDiagramId}
+    fileLoaded={!!diagramHandle}
+  />
 
   <main>
     <SvelteFlow
@@ -520,42 +520,6 @@
     height: 100vh;
     display: flex;
     flex-direction: column;
-  }
-
-  header {
-    display: flex;
-    gap: 8px;
-    padding: 8px 12px;
-    background: #f9fafb;
-    border-bottom: 1px solid #e5e7eb;
-    align-items: center;
-  }
-
-  header button {
-    background: white;
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
-    padding: 6px 12px;
-    cursor: pointer;
-    font-size: 13px;
-  }
-
-  header button:hover:not(:disabled) {
-    background: #f3f4f6;
-  }
-
-  header button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  header select {
-    margin-left: auto;
-    padding: 6px 12px;
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
-    font-size: 13px;
-    background: white;
   }
 
   main {

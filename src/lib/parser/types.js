@@ -77,4 +77,43 @@
  * @property {number} column
  */
 
+// ============================================================================
+// JSONC Diagram File Types (new format)
+// ============================================================================
+
+/**
+ * @typedef {Object} DiagramTableEntry
+ * @property {string} [id] - Optional ID for arrow references
+ * @property {string} name - Qualified name or wildcard pattern
+ * @property {number} [x] - Position in pixels
+ * @property {number} [y] - Position in pixels
+ * @property {string} [color] - Hex color for table header
+ */
+
+/**
+ * @typedef {Object} DiagramDefinition
+ * @property {string} id - Unique identifier within file
+ * @property {string} title - Display name
+ * @property {DiagramTableEntry[]} tables
+ * @property {any[]} [notes] - Phase 2
+ * @property {any[]} [arrows] - Phase 2
+ */
+
+/**
+ * @typedef {Object} DiagramFile
+ * @property {string} sql - Path to schema SQL file (relative to diagram file)
+ * @property {DiagramDefinition[]} diagrams
+ */
+
+/**
+ * @typedef {Object} ResolvedTableEntry
+ * @property {string} qualifiedName - "schema.table"
+ * @property {number} x
+ * @property {number} y
+ * @property {string} [id] - Optional ID for arrow references
+ * @property {string} [color] - Hex color for table header
+ * @property {boolean} fromWildcard - Whether this entry came from wildcard expansion
+ * @property {string} [originalPattern] - The wildcard pattern that matched this table
+ */
+
 export {};

@@ -1,0 +1,32 @@
+{
+  // Example diagram file for testing
+  "sql": "schema.sql",
+  "diagrams": [
+    {
+      "id": "main",
+      "title": "Core Tables",
+      "tables": [
+        { "id": "u", "name": "public.users", "x": 50, "y": 100, "color": "#3b82f6" },
+        { "id": "p", "name": "public.posts", "x": 300, "y": 100 },
+        { "name": "public.comments", "x": 550, "y": 100 }
+      ]
+    },
+    {
+      "id": "contracts",
+      "title": "Contract Module",
+      "tables": [
+        // Wildcard: all tables in contract schema
+        { "name": "contract.*" },
+        // Override position for specific table
+        { "id": "c", "name": "contract.contracts", "x": 100, "y": 50, "color": "#10b981" }
+      ]
+    },
+    {
+      "id": "all",
+      "title": "All Tables",
+      "tables": [
+        { "name": "*" }
+      ]
+    }
+  ]
+}
