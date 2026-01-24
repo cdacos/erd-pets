@@ -1,27 +1,102 @@
 /**
  * Circular layout algorithm.
  * Places nodes evenly distributed on a circle, sorted alphabetically.
+ * Automatically groups by schema when multiple schemas are present.
  */
 
 /**
- * @typedef {Object} NodePosition
- * @property {string} id
- * @property {number} x
- * @property {number} y
+ * @typedef {Object} CircularOptions
+ * @property {number} [centerX] - Center X coordinate (default: calculated from bounds)
+ * @property {number} [centerY] - Center Y coordinate (default: calculated from bounds)
+ * @property {number} [radius] - Circle radius (default: calculated from node count)
+ * @property {number} [schemaSpacing] - Gap between schema groups (default: 600)
  */
+
+/**
+ * Extract schema name from qualified table name.
+ * @param {string} qualifiedName - Format: "schema.table"
+ * @returns {string} Schema name
+ */
+function getSchema(qualifiedName) {
+  const dotIndex = qualifiedName.indexOf('.');
+  return dotIndex >= 0 ? qualifiedName.substring(0, dotIndex) : 'public';
+}
 
 /**
  * Apply circular layout to nodes.
  * Nodes are sorted alphabetically by id and placed evenly on a circle.
+ * Automatically groups by schema when multiple schemas are detected.
  *
  * @param {Array<{id: string, position: {x: number, y: number}}>} nodes
- * @param {Object} [options]
- * @param {number} [options.centerX] - Center X coordinate (default: calculated from bounds)
- * @param {number} [options.centerY] - Center Y coordinate (default: calculated from bounds)
- * @param {number} [options.radius] - Circle radius (default: calculated from node count)
+ * @param {CircularOptions} [options]
  * @returns {Map<string, {x: number, y: number}>} New positions keyed by node id
  */
 export function circularLayout(nodes, options = {}) {
+  if (nodes.length === 0) {
+    return new Map();
+  }
+
+  const schemaSpacing = options.schemaSpacing ?? 600;
+
+  // Group nodes by schema
+  /** @type {Map<string, Array<{id: string, position: {x: number, y: number}}>>} */
+  const schemaGroups = new Map();
+  for (const node of nodes) {
+    const schema = getSchema(node.id);
+    if (!schemaGroups.has(schema)) {
+      schemaGroups.set(schema, []);
+    }
+    schemaGroups.get(schema)?.push(node);
+  }
+
+  // If single schema, use simple layout
+  if (schemaGroups.size === 1) {
+    return layoutSingleCircle(nodes, options.centerX, options.centerY, options.radius);
+  }
+
+  // Multiple schemas: layout each as a separate circle, arranged horizontally
+  /** @type {Map<string, {x: number, y: number}>} */
+  const allPositions = new Map();
+
+  // Sort schemas alphabetically for consistent ordering
+  const schemas = [...schemaGroups.keys()].sort((a, b) => a.localeCompare(b));
+
+  let currentX = 0;
+
+  for (const schema of schemas) {
+    const schemaNodes = schemaGroups.get(schema) ?? [];
+
+    // Calculate radius for this group
+    const radius = Math.max(200, schemaNodes.length * 50);
+
+    // Center of this circle
+    const centerX = currentX + radius + 50;
+    const centerY = radius + 50;
+
+    // Layout this schema group
+    const groupPositions = layoutSingleCircle(schemaNodes, centerX, centerY, radius);
+
+    // Merge positions
+    for (const [id, pos] of groupPositions) {
+      allPositions.set(id, pos);
+    }
+
+    // Move to next circle: diameter + spacing
+    currentX = centerX + radius + schemaSpacing;
+  }
+
+  return allPositions;
+}
+
+/**
+ * Layout a single group of nodes in a circle.
+ * @param {Array<{id: string, position: {x: number, y: number}}>} nodes
+ * @param {number} [centerX] - Center X coordinate
+ * @param {number} [centerY] - Center Y coordinate
+ * @param {number} [radius] - Circle radius
+ * @returns {Map<string, {x: number, y: number}>}
+ */
+function layoutSingleCircle(nodes, centerX, centerY, radius) {
   if (nodes.length === 0) {
     return new Map();
   }
@@ -30,9 +105,6 @@ export function circularLayout(nodes, options = {}) {
   const sortedNodes = [...nodes].sort((a, b) => a.id.localeCompare(b.id));
 
   // Calculate center from current bounds if not provided
-  let centerX = options.centerX;
-  let centerY = options.centerY;
-
   if (centerX === undefined || centerY === undefined) {
     const xs = nodes.map((n) => n.position.x);
     const ys = nodes.map((n) => n.position.y);
@@ -47,7 +119,7 @@ export function circularLayout(nodes, options = {}) {
 
   // Calculate radius based on node count if not provided
   // More nodes = larger radius to prevent overlap
-  const radius = options.radius ?? Math.max(200, sortedNodes.length * 50);
+  radius = radius ?? Math.max(200, sortedNodes.length * 50);
 
   // Place nodes evenly on circle
   const positions = new Map();

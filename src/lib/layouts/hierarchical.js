@@ -14,7 +14,7 @@
  * @typedef {Object} HierarchicalOptions
  * @property {number} [layerSpacing] - Horizontal spacing between layers (default: 675)
  * @property {number} [nodeSpacing] - Vertical spacing between nodes in a layer (default: 300)
- * @property {number} [schemaSpacing] - Spacing between schema groups (default: 500)
+ * @property {number} [schemaSpacing] - Gap between schema groups (default: 600)
  * @property {number} [maxIterations] - Max barycenter iterations (default: 24)
  */
 
@@ -45,7 +45,7 @@ export function hierarchicalLayout(nodes, edges, options = {}) {
 
   const layerSpacing = options.layerSpacing ?? 675;
   const nodeSpacing = options.nodeSpacing ?? 300;
-  const schemaSpacing = options.schemaSpacing ?? 500;
+  const schemaSpacing = options.schemaSpacing ?? 600;
   const maxIterations = options.maxIterations ?? 24;
 
   // Group nodes by schema
@@ -93,7 +93,7 @@ export function hierarchicalLayout(nodes, edges, options = {}) {
       50
     );
 
-    // Find the width of this group
+    // Find the bounding box of this group
     let maxX = currentX;
     for (const pos of groupPositions.values()) {
       maxX = Math.max(maxX, pos.x);
@@ -104,8 +104,11 @@ export function hierarchicalLayout(nodes, edges, options = {}) {
       allPositions.set(id, pos);
     }
 
-    // Move to next column with spacing (estimate node width ~250px)
-    currentX = maxX + 250 + schemaSpacing;
+    // Move to next group: account for node width (~300px) plus schema spacing
+    // This ensures a clear gap of schemaSpacing between the right edge of nodes
+    // in this group and the left edge of nodes in the next group
+    const estimatedNodeWidth = 300;
+    currentX = maxX + estimatedNodeWidth + schemaSpacing;
   }
 
   return allPositions;
