@@ -91,10 +91,19 @@
  */
 
 /**
+ * @typedef {Object} RelationRule
+ * @property {string} from - Glob pattern for source column (schema.table.column)
+ * @property {string} to - Glob pattern for target column (schema.table.column)
+ * @property {'solid' | 'dashed' | 'hidden'} [line] - Line style (default: solid)
+ * @property {string} [color] - Hex color for the edge
+ */
+
+/**
  * @typedef {Object} DiagramDefinition
  * @property {string} id - Unique identifier within file
  * @property {string} title - Display name
  * @property {DiagramTableEntry[]} tables
+ * @property {RelationRule[]} [relations] - FK edge styling rules
  * @property {any[]} [notes] - Phase 2
  * @property {any[]} [arrows] - Phase 2
  */

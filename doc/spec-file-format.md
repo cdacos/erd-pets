@@ -22,6 +22,7 @@ A diagram file references a single SQL schema file and contains one or more diag
       "id": "string",               // unique identifier within file
       "title": "string",            // display name
       "tables": [ ],                // required
+      "relations": [ ],             // optional
       "notes": [ ],                 // optional
       "arrows": [ ]                 // optional
     }
@@ -55,6 +56,52 @@ Wildcards expand to matching tables at parse time. Tables matched by wildcards t
 - Tables listed in the diagram but not found in the SQL schema produce an error
 - Errors are displayed persistently in the UI until resolved
 - Duplicate table entries: warn and last entry wins
+
+## Relations
+
+Style or hide FK edges based on pattern matching. Each entry matches relationships by their source (`from`) and target (`to`) columns.
+
+```jsonc
+{ "from": "*.created_by", "to": "*.auth_user.id", "line": "hidden" }
+```
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `from` | string | yes | Glob pattern for source column (`schema.table.column`) |
+| `to` | string | yes | Glob pattern for target column (`schema.table.column`) |
+| `line` | string | no | `solid` (default), `dashed`, `hidden` |
+| `color` | string | no | Line color (hex) |
+
+### Pattern Matching
+
+Patterns match against the fully qualified column path: `schema.table.column`
+
+- `*` matches any characters (including dots)
+- `*.created_by` — any column named `created_by`
+- `public.orders.*` — any column in `public.orders`
+- `*.audit.*` — any column in any `audit` table
+
+### Evaluation
+
+- Relations are evaluated in order; first match wins
+- If no relation matches, the FK edge renders with default styling
+- Multiple relations can match different edges independently
+
+### Examples
+
+```jsonc
+"relations": [
+  // Hide all audit trail relationships
+  { "from": "*.created_by", "to": "*.auth_user.id", "line": "hidden" },
+  { "from": "*.updated_by", "to": "*.auth_user.id", "line": "hidden" },
+
+  // De-emphasize tenant relationships
+  { "from": "*.tenant_id", "to": "*.tenant.id", "line": "dashed", "color": "#9ca3af" },
+
+  // Highlight important relationship
+  { "from": "*.order_id", "to": "*.orders.id", "color": "#22c55e" }
+]
+```
 
 ## Notes
 
@@ -145,6 +192,10 @@ When saving:
       "tables": [
         { "name": "contract.*" },
         { "id": "c", "name": "contract.contract", "x": 100, "y": 50 }
+      ],
+      "relations": [
+        { "from": "*.created_by", "to": "*.user.id", "line": "hidden" },
+        { "from": "*.updated_by", "to": "*.user.id", "line": "hidden" }
       ]
     }
   ]

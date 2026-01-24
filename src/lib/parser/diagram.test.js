@@ -4,6 +4,7 @@ import {
   parseDiagramFile,
   resolveDiagramTables,
   serializeDiagramFile,
+  resolveRelation,
 } from './diagram.js';
 
 describe('stripJsonComments', () => {
@@ -658,5 +659,280 @@ describe('serializeDiagramFile', () => {
     expect(reparsed?.sql).toBe(data?.sql);
     expect(reparsed?.diagrams[0].id).toBe(data?.diagrams[0].id);
     expect(reparsed?.diagrams[0].tables[0].name).toBe(data?.diagrams[0].tables[0].name);
+  });
+
+  it('preserves relations array', () => {
+    const diagramFile = {
+      sql: 'schema.sql',
+      diagrams: [
+        {
+          id: 'main',
+          title: 'Main',
+          tables: [{ name: 'public.users', x: 100, y: 200 }],
+          relations: [
+            { from: '*.created_by', to: '*.user.id', line: 'hidden' },
+            { from: '*.tenant_id', to: '*.tenant.id', line: 'dashed', color: '#9ca3af' },
+          ],
+        },
+      ],
+    };
+    const nodePositions = new Map([['public.users', { x: 150, y: 250 }]]);
+
+    const result = serializeDiagramFile(diagramFile, 'main', nodePositions, tables);
+    const parsed = JSON.parse(result);
+
+    expect(parsed.diagrams[0].relations).toEqual([
+      { from: '*.created_by', to: '*.user.id', line: 'hidden' },
+      { from: '*.tenant_id', to: '*.tenant.id', line: 'dashed', color: '#9ca3af' },
+    ]);
+  });
+});
+
+describe('parseDiagramFile relations validation', () => {
+  it('parses valid relations', () => {
+    const content = `{
+  "sql": "schema.sql",
+  "diagrams": [{
+    "id": "main",
+    "title": "Test",
+    "tables": [],
+    "relations": [
+      { "from": "*.created_by", "to": "*.user.id", "line": "hidden" },
+      { "from": "*.order_id", "to": "*.orders.id", "color": "#22c55e" }
+    ]
+  }]
+}`;
+    const { data, errors } = parseDiagramFile(content);
+
+    expect(errors).toHaveLength(0);
+    expect(data?.diagrams[0].relations).toHaveLength(2);
+  });
+
+  it('reports missing from field', () => {
+    const content = `{
+  "sql": "schema.sql",
+  "diagrams": [{
+    "id": "main",
+    "title": "Test",
+    "tables": [],
+    "relations": [{ "to": "*.user.id" }]
+  }]
+}`;
+    const { data, errors } = parseDiagramFile(content);
+
+    expect(data).toBeNull();
+    expect(errors.some((e) => e.message.includes('"from"'))).toBe(true);
+  });
+
+  it('reports missing to field', () => {
+    const content = `{
+  "sql": "schema.sql",
+  "diagrams": [{
+    "id": "main",
+    "title": "Test",
+    "tables": [],
+    "relations": [{ "from": "*.created_by" }]
+  }]
+}`;
+    const { data, errors } = parseDiagramFile(content);
+
+    expect(data).toBeNull();
+    expect(errors.some((e) => e.message.includes('"to"'))).toBe(true);
+  });
+
+  it('reports invalid line value', () => {
+    const content = `{
+  "sql": "schema.sql",
+  "diagrams": [{
+    "id": "main",
+    "title": "Test",
+    "tables": [],
+    "relations": [{ "from": "*.x", "to": "*.y", "line": "invalid" }]
+  }]
+}`;
+    const { data, errors } = parseDiagramFile(content);
+
+    expect(data).toBeNull();
+    expect(errors.some((e) => e.message.includes('solid'))).toBe(true);
+  });
+
+  it('accepts all valid line values', () => {
+    const content = `{
+  "sql": "schema.sql",
+  "diagrams": [{
+    "id": "main",
+    "title": "Test",
+    "tables": [],
+    "relations": [
+      { "from": "*.a", "to": "*.b", "line": "solid" },
+      { "from": "*.c", "to": "*.d", "line": "dashed" },
+      { "from": "*.e", "to": "*.f", "line": "hidden" }
+    ]
+  }]
+}`;
+    const { data, errors } = parseDiagramFile(content);
+
+    expect(errors).toHaveLength(0);
+    expect(data?.diagrams[0].relations).toHaveLength(3);
+  });
+});
+
+describe('resolveRelation', () => {
+  it('returns default styling when no rules match', () => {
+    const fk = {
+      sourceTable: 'public.orders',
+      sourceColumn: 'user_id',
+      targetTable: 'public.users',
+      targetColumn: 'id',
+    };
+
+    const result = resolveRelation(fk, []);
+
+    expect(result).toEqual({ hidden: false });
+  });
+
+  it('matches exact column pattern', () => {
+    const fk = {
+      sourceTable: 'public.orders',
+      sourceColumn: 'created_by',
+      targetTable: 'public.users',
+      targetColumn: 'id',
+    };
+    const relations = [
+      { from: 'public.orders.created_by', to: 'public.users.id', line: 'hidden' },
+    ];
+
+    const result = resolveRelation(fk, relations);
+
+    expect(result).toEqual({ hidden: true });
+  });
+
+  it('matches wildcard from pattern', () => {
+    const fk = {
+      sourceTable: 'public.orders',
+      sourceColumn: 'created_by',
+      targetTable: 'public.users',
+      targetColumn: 'id',
+    };
+    const relations = [
+      { from: '*.created_by', to: 'public.users.id', line: 'hidden' },
+    ];
+
+    const result = resolveRelation(fk, relations);
+
+    expect(result).toEqual({ hidden: true });
+  });
+
+  it('matches wildcard to pattern', () => {
+    const fk = {
+      sourceTable: 'public.orders',
+      sourceColumn: 'user_id',
+      targetTable: 'public.users',
+      targetColumn: 'id',
+    };
+    const relations = [
+      { from: 'public.orders.user_id', to: '*.users.id', line: 'dashed' },
+    ];
+
+    const result = resolveRelation(fk, relations);
+
+    expect(result).toEqual({ hidden: false, line: 'dashed' });
+  });
+
+  it('matches both wildcards', () => {
+    const fk = {
+      sourceTable: 'contract.orders',
+      sourceColumn: 'created_by',
+      targetTable: 'auth.users',
+      targetColumn: 'id',
+    };
+    const relations = [
+      { from: '*.created_by', to: '*.users.id', line: 'hidden' },
+    ];
+
+    const result = resolveRelation(fk, relations);
+
+    expect(result).toEqual({ hidden: true });
+  });
+
+  it('returns color when specified', () => {
+    const fk = {
+      sourceTable: 'public.orders',
+      sourceColumn: 'priority_id',
+      targetTable: 'public.priority',
+      targetColumn: 'id',
+    };
+    const relations = [
+      { from: '*.priority_id', to: '*.priority.id', color: '#22c55e' },
+    ];
+
+    const result = resolveRelation(fk, relations);
+
+    expect(result).toEqual({ hidden: false, line: 'solid', color: '#22c55e' });
+  });
+
+  it('returns dashed line with color', () => {
+    const fk = {
+      sourceTable: 'public.orders',
+      sourceColumn: 'tenant_id',
+      targetTable: 'public.tenant',
+      targetColumn: 'id',
+    };
+    const relations = [
+      { from: '*.tenant_id', to: '*.tenant.id', line: 'dashed', color: '#9ca3af' },
+    ];
+
+    const result = resolveRelation(fk, relations);
+
+    expect(result).toEqual({ hidden: false, line: 'dashed', color: '#9ca3af' });
+  });
+
+  it('first matching rule wins', () => {
+    const fk = {
+      sourceTable: 'public.orders',
+      sourceColumn: 'created_by',
+      targetTable: 'public.users',
+      targetColumn: 'id',
+    };
+    const relations = [
+      { from: '*.created_by', to: '*', line: 'hidden' },
+      { from: '*', to: '*.users.id', color: '#ff0000' },
+    ];
+
+    const result = resolveRelation(fk, relations);
+
+    expect(result).toEqual({ hidden: true });
+  });
+
+  it('requires both from and to to match', () => {
+    const fk = {
+      sourceTable: 'public.orders',
+      sourceColumn: 'created_by',
+      targetTable: 'public.products',
+      targetColumn: 'id',
+    };
+    const relations = [
+      { from: '*.created_by', to: '*.users.id', line: 'hidden' },
+    ];
+
+    const result = resolveRelation(fk, relations);
+
+    expect(result).toEqual({ hidden: false }); // No match because target is products, not users
+  });
+
+  it('matches suffix patterns', () => {
+    const fk = {
+      sourceTable: 'public.orders',
+      sourceColumn: 'updated_by',
+      targetTable: 'public.users',
+      targetColumn: 'id',
+    };
+    const relations = [
+      { from: '*_by', to: '*.id', line: 'hidden' },
+    ];
+
+    const result = resolveRelation(fk, relations);
+
+    expect(result).toEqual({ hidden: true });
   });
 });

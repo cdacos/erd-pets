@@ -11,8 +11,10 @@
  * @typedef {import('./types.js').DiagramDefinition} DiagramDefinition
  * @typedef {import('./types.js').DiagramTableEntry} DiagramTableEntry
  * @typedef {import('./types.js').ResolvedTableEntry} ResolvedTableEntry
+ * @typedef {import('./types.js').RelationRule} RelationRule
  * @typedef {import('./types.js').ParseError} ParseError
  * @typedef {import('./types.js').Table} Table
+ * @typedef {import('./types.js').ForeignKey} ForeignKey
  */
 
 /**
@@ -188,6 +190,57 @@ function validateDiagramFile(data) {
           // Validate optional color
           if ('color' in t && typeof t.color !== 'string') {
             errors.push({ message: `${tablePrefix}.color: must be a string` });
+          }
+        }
+      }
+
+      // Validate optional relations
+      if ('relations' in d) {
+        if (!Array.isArray(d.relations)) {
+          errors.push({ message: `${prefix}.relations: must be an array` });
+        } else {
+          for (let k = 0; k < d.relations.length; k++) {
+            const relation = d.relations[k];
+            const relPrefix = `${prefix}.relations[${k}]`;
+
+            if (typeof relation !== 'object' || relation === null || Array.isArray(relation)) {
+              errors.push({ message: `${relPrefix}: must be an object` });
+              continue;
+            }
+
+            const r = /** @type {Record<string, unknown>} */ (relation);
+
+            // Validate from (required)
+            if (!('from' in r)) {
+              errors.push({ message: `${relPrefix}: missing required field "from"` });
+            } else if (typeof r.from !== 'string') {
+              errors.push({ message: `${relPrefix}.from: must be a string` });
+            } else if (r.from.trim() === '') {
+              errors.push({ message: `${relPrefix}.from: cannot be empty` });
+            }
+
+            // Validate to (required)
+            if (!('to' in r)) {
+              errors.push({ message: `${relPrefix}: missing required field "to"` });
+            } else if (typeof r.to !== 'string') {
+              errors.push({ message: `${relPrefix}.to: must be a string` });
+            } else if (r.to.trim() === '') {
+              errors.push({ message: `${relPrefix}.to: cannot be empty` });
+            }
+
+            // Validate optional line
+            if ('line' in r) {
+              if (typeof r.line !== 'string') {
+                errors.push({ message: `${relPrefix}.line: must be a string` });
+              } else if (!['solid', 'dashed', 'hidden'].includes(r.line)) {
+                errors.push({ message: `${relPrefix}.line: must be "solid", "dashed", or "hidden"` });
+              }
+            }
+
+            // Validate optional color
+            if ('color' in r && typeof r.color !== 'string') {
+              errors.push({ message: `${relPrefix}.color: must be a string` });
+            }
           }
         }
       }
@@ -413,6 +466,65 @@ export function createDefaultDiagramFile(sqlFilename) {
   };
 }
 
+/**
+ * Convert a glob pattern to a regular expression.
+ * Supports * as wildcard matching any characters (including dots).
+ * @param {string} pattern
+ * @returns {RegExp}
+ */
+function globToRegex(pattern) {
+  // Escape regex special chars except *
+  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+  // Replace * with .* for wildcard
+  const regexStr = '^' + escaped.replace(/\*/g, '.*') + '$';
+  return new RegExp(regexStr);
+}
+
+/**
+ * Check if a column path matches a glob pattern.
+ * @param {string} path - Full column path (schema.table.column)
+ * @param {string} pattern - Glob pattern
+ * @returns {boolean}
+ */
+function matchesGlob(path, pattern) {
+  return globToRegex(pattern).test(path);
+}
+
+/**
+ * @typedef {Object} ResolvedRelation
+ * @property {boolean} hidden - Whether the edge should be hidden
+ * @property {'solid' | 'dashed'} [line] - Line style
+ * @property {string} [color] - Hex color
+ */
+
+/**
+ * Apply relation rules to a foreign key and return styling.
+ * First matching rule wins.
+ * @param {ForeignKey} fk
+ * @param {RelationRule[]} relations
+ * @returns {ResolvedRelation}
+ */
+export function resolveRelation(fk, relations) {
+  const fromPath = `${fk.sourceTable}.${fk.sourceColumn}`;
+  const toPath = `${fk.targetTable}.${fk.targetColumn}`;
+
+  for (const rule of relations) {
+    if (matchesGlob(fromPath, rule.from) && matchesGlob(toPath, rule.to)) {
+      if (rule.line === 'hidden') {
+        return { hidden: true };
+      }
+      return {
+        hidden: false,
+        line: rule.line === 'dashed' ? 'dashed' : 'solid',
+        color: rule.color,
+      };
+    }
+  }
+
+  // No match - default styling
+  return { hidden: false };
+}
+
 export function serializeDiagramFile(diagramFile, selectedDiagramId, nodePositions, tables) {
   // Deep clone to avoid mutating the original
   const output = {
@@ -426,6 +538,7 @@ export function serializeDiagramFile(diagramFile, selectedDiagramId, nodePositio
           id: diagram.id,
           title: diagram.title,
           tables: diagram.tables.map((t) => ({ ...t })),
+          ...(diagram.relations ? { relations: diagram.relations } : {}),
           ...(diagram.notes ? { notes: diagram.notes } : {}),
           ...(diagram.arrows ? { arrows: diagram.arrows } : {}),
         };
@@ -486,6 +599,7 @@ export function serializeDiagramFile(diagramFile, selectedDiagramId, nodePositio
         id: diagram.id,
         title: diagram.title,
         tables: newTables,
+        ...(diagram.relations ? { relations: diagram.relations } : {}),
         ...(diagram.notes ? { notes: diagram.notes } : {}),
         ...(diagram.arrows ? { arrows: diagram.arrows } : {}),
       };

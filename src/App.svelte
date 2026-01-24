@@ -26,6 +26,7 @@
     resolveDiagramTables,
     serializeDiagramFile,
     createDefaultDiagramFile,
+    resolveRelation,
   } from './lib/parser/diagram.js';
 
   const nodeTypes = {
@@ -229,13 +230,26 @@
       };
     });
 
+    // Get relation rules for this diagram
+    const relations = diagram.relations ?? [];
+
     // Create edges only for FKs where both tables are in diagram
     const newEdges = foreignKeys
       .filter((fk) => diagramTables.has(fk.sourceTable) && diagramTables.has(fk.targetTable))
       .map((fk) => {
+        const resolved = resolveRelation(fk, relations);
+        if (resolved.hidden) {
+          return null;
+        }
         const sourcePos = positionMap.get(fk.sourceTable);
         const targetPos = positionMap.get(fk.targetTable);
         const handles = getBestHandles(sourcePos, targetPos, fk.sourceColumn, fk.targetColumn);
+        // Build style string for color and dashed
+        const styleProps = [];
+        if (resolved.color) styleProps.push(`stroke: ${resolved.color}`);
+        if (resolved.line === 'dashed') styleProps.push('stroke-dasharray: 5 5');
+        const style = styleProps.length > 0 ? styleProps.join('; ') : undefined;
+
         return {
           id: `${fk.sourceTable}.${fk.sourceColumn}->${fk.targetTable}.${fk.targetColumn}`,
           source: fk.sourceTable,
@@ -243,10 +257,17 @@
           sourceHandle: handles.sourceHandle,
           targetHandle: handles.targetHandle,
           type: 'default',
-          markerEnd: { type: MarkerType.ArrowClosed, width: 25, height: 25 },
+          style,
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 25,
+            height: 25,
+            color: resolved.color,
+          },
           data: { sourceColumn: fk.sourceColumn, targetColumn: fk.targetColumn },
         };
-      });
+      })
+      .filter((edge) => edge !== null);
 
     nodes = newNodes;
     edges = newEdges;
