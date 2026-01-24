@@ -395,6 +395,24 @@ export function resolveDiagramTables(diagram, tables, existingPositions) {
  * @param {Table[]} tables - All tables from SQL
  * @returns {string}
  */
+/**
+ * Create a default diagram file structure for a new SQL schema.
+ * @param {string} sqlFilename - The filename of the SQL file (just the name, not full path)
+ * @returns {DiagramFile}
+ */
+export function createDefaultDiagramFile(sqlFilename) {
+  return {
+    sql: sqlFilename,
+    diagrams: [
+      {
+        id: 'main',
+        title: 'All Tables',
+        tables: [{ name: '*' }],
+      },
+    ],
+  };
+}
+
 export function serializeDiagramFile(diagramFile, selectedDiagramId, nodePositions, tables) {
   // Deep clone to avoid mutating the original
   const output = {

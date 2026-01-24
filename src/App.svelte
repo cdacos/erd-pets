@@ -15,6 +15,7 @@
     openSqlFile,
     refreshFiles,
     saveToFile,
+    saveNewDiagramFile,
     isFileSystemAccessSupported,
   } from './lib/fileManager.js';
   import { parsePostgresSQL } from './lib/parser/postgres.js';
@@ -22,6 +23,7 @@
     parseDiagramFile,
     resolveDiagramTables,
     serializeDiagramFile,
+    createDefaultDiagramFile,
   } from './lib/parser/diagram.js';
 
   const nodeTypes = {
@@ -33,6 +35,12 @@
 
   /** @type {FileSystemFileHandle | null} */
   let sqlHandle = $state(null);
+
+  /** @type {string} */
+  let diagramFileName = $state('');
+
+  /** @type {string} */
+  let sqlFileName = $state('');
 
   /** @type {string} */
   let diagramContent = $state('');
@@ -280,6 +288,70 @@
   }
 
   /**
+   * Handle New Diagram button click.
+   */
+  async function handleNew() {
+    if (!isFileSystemAccessSupported()) {
+      showToast(
+        'File System Access API not supported. Please use Chrome, Edge, or another Chromium-based browser.',
+        'error'
+      );
+      return;
+    }
+
+    try {
+      // Step 1: Open SQL file
+      const sqlResult = await openSqlFile();
+      const newSqlHandle = sqlResult.handle;
+      const newSqlContent = sqlResult.content;
+
+      // Step 2: Parse SQL to validate it
+      const newParseResult = parsePostgresSQL(newSqlContent);
+
+      if (newParseResult.errors.length > 0) {
+        for (const error of newParseResult.errors) {
+          showToast(error.message || String(error), 'error');
+        }
+      }
+
+      if (newParseResult.tables.length === 0) {
+        showToast('No tables found in the SQL file.', 'error');
+        return;
+      }
+
+      // Step 3: Create default diagram file content
+      const sqlFile = await newSqlHandle.getFile();
+      const defaultDiagram = createDefaultDiagramFile(sqlFile.name);
+      const diagramContent = JSON.stringify(defaultDiagram, null, 2);
+
+      // Step 4: Save new diagram file (picker starts in same directory as SQL file)
+      const newDiagramHandle = await saveNewDiagramFile(diagramContent, newSqlHandle);
+
+      // Step 5: Update state
+      diagramHandle = newDiagramHandle;
+      sqlHandle = newSqlHandle;
+      diagramFileName = newDiagramHandle.name;
+      sqlFileName = sqlFile.name;
+      sqlContent = newSqlContent;
+      parseResult = newParseResult;
+      diagramFile = defaultDiagram;
+      selectedDiagramId = 'main';
+
+      // Step 6: Render diagram
+      const diagram = diagramFile.diagrams[0];
+      convertToFlowWithDiagram(diagram, parseResult.tables, parseResult.foreignKeys);
+
+      showToast(`Created new diagram with ${parseResult.tables.length} tables.`, 'success');
+    } catch (err) {
+      // User cancelled the picker - not an error
+      if (err.name === 'AbortError') {
+        return;
+      }
+      showToast(err.message || 'Failed to create diagram.', 'error');
+    }
+  }
+
+  /**
    * Handle Load Diagram button click.
    */
   async function handleLoad() {
@@ -295,6 +367,7 @@
       // Step 1: Open diagram file
       const diagramResult = await openDiagramFile();
       diagramHandle = diagramResult.handle;
+      diagramFileName = diagramResult.handle.name;
       diagramContent = diagramResult.content;
 
       // Step 2: Parse diagram file
@@ -318,6 +391,7 @@
 
       const sqlResult = await openSqlFile(diagramHandle);
       sqlHandle = sqlResult.handle;
+      sqlFileName = sqlResult.handle.name;
       sqlContent = sqlResult.content;
 
       // Step 4: Parse SQL
@@ -478,6 +552,9 @@
       } else if (e.key === 'o') {
         e.preventDefault();
         handleLoad();
+      } else if (e.key === 'n') {
+        e.preventDefault();
+        handleNew();
       }
     }
 
@@ -488,6 +565,7 @@
 
 <div class="app">
   <DiagramToolbar
+    onNew={handleNew}
     onLoad={handleLoad}
     onRefresh={handleRefresh}
     onSave={handleSave}
@@ -495,6 +573,8 @@
     {diagrams}
     selectedDiagramId={selectedDiagramId}
     fileLoaded={!!diagramHandle}
+    {diagramFileName}
+    {sqlFileName}
   />
 
   <main>
