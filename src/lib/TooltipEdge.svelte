@@ -1,5 +1,5 @@
 <script>
-  import { getBezierPath } from '@xyflow/svelte';
+  import { BaseEdge, getBezierPath } from '@xyflow/svelte';
 
   let {
     id,
@@ -33,6 +33,27 @@
   let tooltipY = $derived((sourceY + targetY) / 2);
 </script>
 
+<defs>
+  <marker
+    id={`arrow-${id}`}
+    markerWidth="12.5"
+    markerHeight="12.5"
+    viewBox="-10 -10 20 20"
+    markerUnits="strokeWidth"
+    orient="auto-start-reverse"
+    refX="0"
+    refY="0"
+  >
+    <polyline
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="1"
+      fill="currentColor"
+      points="-5,-4 0,0 -5,4 -5,-4"
+    />
+  </marker>
+</defs>
+
 <g
   class="tooltip-edge"
   onmouseenter={() => (showTooltip = true)}
@@ -45,17 +66,8 @@
     stroke="transparent"
     stroke-width="20"
   />
-  <!-- Visible edge path -->
-  <path
-    {id}
-    class="svelte-flow__edge-path"
-    d={path[0]}
-    fill="none"
-    stroke="#b1b1b7"
-    stroke-width="1"
-    {style}
-    marker-end={markerEnd}
-  />
+  <!-- Visible edge with marker -->
+  <BaseEdge {id} path={path[0]} markerEnd={`url(#arrow-${id})`} {style} />
 
   {#if showTooltip}
     <foreignObject
