@@ -82,7 +82,9 @@
 
   /**
    * Determine the best handles for connecting two nodes based on their positions.
-   * Uses left/right edge of the specific column row, choosing the side closest to the other node.
+   * Uses left/right edge of the specific column row, choosing optimal routing:
+   * - Horizontally separated: opposite sides (right→left or left→right)
+   * - Vertically aligned: same side (left→left or right→right)
    * @param {{x: number, y: number}} sourcePos
    * @param {{x: number, y: number}} targetPos
    * @param {string} sourceColumn
@@ -91,10 +93,29 @@
    */
   function getBestHandles(sourcePos, targetPos, sourceColumn, targetColumn) {
     const dx = targetPos.x - sourcePos.x;
+    const VERTICAL_THRESHOLD = 100; // Tables within this x-distance are "vertically aligned"
 
-    // Connect using the edge closest to the other entity
+    if (Math.abs(dx) < VERTICAL_THRESHOLD) {
+      // Tables are vertically aligned - use same side handles
+      // Choose the side away from the slight horizontal offset
+      if (dx >= 0) {
+        // Target is slightly right, route edges out the left
+        return {
+          sourceHandle: `left-${sourceColumn}-source`,
+          targetHandle: `left-${targetColumn}-target`,
+        };
+      } else {
+        // Target is slightly left, route edges out the right
+        return {
+          sourceHandle: `right-${sourceColumn}-source`,
+          targetHandle: `right-${targetColumn}-target`,
+        };
+      }
+    }
+
+    // Tables are horizontally separated - use opposite sides
     if (dx >= 0) {
-      // Target is to the right of (or same x as) source
+      // Target is to the right of source
       return {
         sourceHandle: `right-${sourceColumn}-source`,
         targetHandle: `left-${targetColumn}-target`,
