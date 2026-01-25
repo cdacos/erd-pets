@@ -7,7 +7,7 @@
    * @typedef {'rounded' | 'bezier'} EdgeStyle
    */
 
-  /** @type {{ onNew: () => void, onLoad: () => void, onRefresh: () => void, onSave: () => void, onDiagramChange: (id: string) => void, onLayout: (type: LayoutType) => void, onEdgeStyleChange: (style: EdgeStyle) => void, onExport: (pixelRatio: number) => void, diagrams: DiagramDefinition[], selectedDiagramId: string, fileLoaded: boolean, diagramFileName: string, sqlFileName: string, edgeStyle: EdgeStyle, showTableList: boolean, onToggleTableList: () => void }} */
+  /** @type {{ onNew: () => void, onLoad: () => void, onRefresh: () => void, onSave: () => void, onDiagramChange: (id: string) => void, onLayout: (type: LayoutType) => void, onEdgeStyleChange: (style: EdgeStyle) => void, onExport: (pixelRatio: number) => void, diagrams: DiagramDefinition[], selectedDiagramId: string, fileLoaded: boolean, diagramFileName: string, sqlFileName: string, edgeStyle: EdgeStyle, showSidebar: boolean, onToggleSidebar: () => void }} */
   let {
     onNew,
     onLoad,
@@ -23,8 +23,8 @@
     diagramFileName = '',
     sqlFileName = '',
     edgeStyle = 'rounded',
-    showTableList = false,
-    onToggleTableList,
+    showSidebar = false,
+    onToggleSidebar,
   } = $props();
 
   /** @type {LayoutType[]} */
@@ -67,9 +67,9 @@
 <header>
   <button
     class="toggle-list-btn"
-    class:active={showTableList}
-    onclick={onToggleTableList}
-    title="Toggle table list"
+    class:active={showSidebar}
+    onclick={onToggleSidebar}
+    title="Toggle sidebar (Cmd+B)"
     disabled={!fileLoaded}
   >
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">

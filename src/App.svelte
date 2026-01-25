@@ -13,7 +13,7 @@
   import Toast from './lib/Toast.svelte';
   import DiagramToolbar from './lib/DiagramToolbar.svelte';
   import ConfirmDialog from './lib/ConfirmDialog.svelte';
-  import TableListPanel from './lib/TableListPanel.svelte';
+  import Sidebar from './lib/sidebar/Sidebar.svelte';
   import ContextMenu from './lib/ContextMenu.svelte';
   import { circularLayout } from './lib/layouts/circular.js';
   import { hierarchicalLayout } from './lib/layouts/hierarchical.js';
@@ -88,7 +88,10 @@
   /** @type {import('./lib/DiagramToolbar.svelte').EdgeStyle} */
   let edgeStyle = $state('rounded');
 
-  let showTableList = $state(false);
+  let showSidebar = $state(false);
+
+  /** @type {import('./lib/sidebar/Sidebar.svelte').SidebarMode} */
+  let sidebarMode = $state('tables');
 
   /** @type {boolean} */
   let isDarkMode = $state(false);
@@ -998,6 +1001,9 @@
       } else if (e.key === 'n') {
         e.preventDefault();
         handleNew();
+      } else if (e.key === 'b') {
+        e.preventDefault();
+        showSidebar = !showSidebar;
       }
     }
 
@@ -1022,16 +1028,18 @@
     {diagramFileName}
     {sqlFileName}
     {edgeStyle}
-    {showTableList}
-    onToggleTableList={() => showTableList = !showTableList}
+    showSidebar={showSidebar}
+    onToggleSidebar={() => showSidebar = !showSidebar}
   />
 
   <div class="main-area">
-    {#if showTableList}
-      <TableListPanel
+    {#if showSidebar}
+      <Sidebar
+        mode={sidebarMode}
+        onModeChange={(mode) => sidebarMode = mode}
         tables={parseResult?.tables ?? []}
         visibleTables={visibleTableNames}
-        onToggle={handleTableVisibilityToggle}
+        onTableToggle={handleTableVisibilityToggle}
       />
     {/if}
     <main>
@@ -1041,6 +1049,7 @@
         {nodeTypes}
         {edgeTypes}
         fitView
+        minZoom={0.1}
         onnodedragstop={recalculateEdgeHandles}
         onnodecontextmenu={handleNodeContextMenu}
         onselectioncontextmenu={handleSelectionContextMenu}
