@@ -14,6 +14,7 @@
   import DiagramToolbar from './lib/DiagramToolbar.svelte';
   import ConfirmDialog from './lib/ConfirmDialog.svelte';
   import CreateTableDialog from './lib/CreateTableDialog.svelte';
+  import CreateRelationshipDialog from './lib/CreateRelationshipDialog.svelte';
   import Sidebar from './lib/sidebar/Sidebar.svelte';
   import ContextMenu from './lib/ContextMenu.svelte';
   import PaneContextMenu from './lib/PaneContextMenu.svelte';
@@ -28,7 +29,7 @@
     saveNewDiagramFile,
     isFileSystemAccessSupported,
   } from './lib/fileManager.js';
-  import { parsePostgresSQL } from './lib/parser/postgres.js';
+  import { parsePostgresSQL, generateForeignKeySql, removeForeignKeyStatement } from './lib/parser/postgres.js';
   import {
     parseDiagramFile,
     resolveDiagramTables,
@@ -89,6 +90,7 @@
   let showLayoutConfirm = $state(false);
   let showRefreshConfirm = $state(false);
   let showCreateTableDialog = $state(false);
+  let showCreateRelationshipDialog = $state(false);
 
   /** @type {string} */
   let editingTableName = $state('');
@@ -952,6 +954,108 @@
   }
 
   /**
+   * Open the create relationship dialog.
+   */
+  function handleCreateRelationship() {
+    if (!sqlHandle) {
+      showToast('No SQL file loaded. Open a diagram first.', 'error');
+      return;
+    }
+    if (!parseResult || parseResult.tables.length === 0) {
+      showToast('No tables found. Create tables first.', 'error');
+      return;
+    }
+    showCreateRelationshipDialog = true;
+  }
+
+  /**
+   * Handle CREATE RELATIONSHIP dialog submission.
+   * @param {string} sourceTable
+   * @param {string} sourceColumn
+   * @param {string} targetTable
+   * @param {string} targetColumn
+   */
+  async function handleCreateRelationshipSubmit(sourceTable, sourceColumn, targetTable, targetColumn) {
+    showCreateRelationshipDialog = false;
+
+    if (!sqlHandle) {
+      showToast('No SQL file loaded.', 'error');
+      return;
+    }
+
+    try {
+      const fkSql = generateForeignKeySql(sourceTable, sourceColumn, targetTable, targetColumn);
+      const newSqlContent = sqlContent.trimEnd() + '\n\n' + fkSql + '\n';
+
+      await saveToFile(sqlHandle, newSqlContent);
+      sqlContent = newSqlContent;
+
+      parseResult = parsePostgresSQL(sqlContent);
+
+      if (parseResult.errors.length > 0) {
+        for (const error of parseResult.errors) {
+          showToast(error.message || String(error), 'error');
+        }
+      }
+
+      if (diagramFile && selectedDiagramId) {
+        const diagram = diagramFile.diagrams.find((d) => d.id === selectedDiagramId);
+        if (diagram) {
+          const existingPositions = getNodePositions();
+          convertToFlowWithDiagram(diagram, parseResult.tables, parseResult.foreignKeys, existingPositions);
+        }
+      }
+
+      showToast('Relationship created.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to create relationship.', 'error');
+    }
+  }
+
+  /**
+   * Delete a foreign key relationship.
+   * @param {import('./lib/parser/types.js').ForeignKey} fk
+   */
+  async function handleDeleteRelationship(fk) {
+    if (!sqlHandle) {
+      showToast('No SQL file loaded.', 'error');
+      return;
+    }
+
+    try {
+      const result = removeForeignKeyStatement(sqlContent, fk);
+
+      if ('error' in result) {
+        showToast(result.error, 'error');
+        return;
+      }
+
+      await saveToFile(sqlHandle, result.sql);
+      sqlContent = result.sql;
+
+      parseResult = parsePostgresSQL(sqlContent);
+
+      if (parseResult.errors.length > 0) {
+        for (const error of parseResult.errors) {
+          showToast(error.message || String(error), 'error');
+        }
+      }
+
+      if (diagramFile && selectedDiagramId) {
+        const diagram = diagramFile.diagrams.find((d) => d.id === selectedDiagramId);
+        if (diagram) {
+          const existingPositions = getNodePositions();
+          convertToFlowWithDiagram(diagram, parseResult.tables, parseResult.foreignKeys, existingPositions);
+        }
+      }
+
+      showToast('Relationship deleted.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to delete relationship.', 'error');
+    }
+  }
+
+  /**
    * Handle layout button click from toolbar.
    * Shows confirmation dialog before applying.
    * @param {import('./lib/DiagramToolbar.svelte').LayoutType} layoutType
@@ -1470,6 +1574,8 @@
         onShowTableSql={handleShowTableSql}
         onCenterTable={handleCenterTable}
         onCreateTable={handleCreateTable}
+        onCreateRelationship={handleCreateRelationship}
+        onDeleteRelationship={handleDeleteRelationship}
         focusSearch={focusTableSearch}
       />
     {/if}
@@ -1557,6 +1663,13 @@
     editingTableName = '';
     editingTableSql = '';
   }}
+/>
+
+<CreateRelationshipDialog
+  open={showCreateRelationshipDialog}
+  tables={parseResult?.tables ?? []}
+  onSubmit={handleCreateRelationshipSubmit}
+  onCancel={() => showCreateRelationshipDialog = false}
 />
 
 <style>

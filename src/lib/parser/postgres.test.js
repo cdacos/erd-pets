@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { tokenize, TokenStream } from './tokenizer.js';
-import { parsePostgresSQL } from './postgres.js';
+import { parsePostgresSQL, generateForeignKeySql, removeForeignKeyStatement } from './postgres.js';
 
 describe('tokenizer', () => {
 	it('tokenizes simple SQL', () => {
@@ -887,5 +887,171 @@ describe('parsePostgresSQL with contracts.sql patterns', () => {
 			name: 'kind',
 			type: 'char(2)'
 		});
+	});
+});
+
+describe('generateForeignKeySql', () => {
+	it('generates ALTER TABLE ADD FOREIGN KEY statement', () => {
+		const sql = generateForeignKeySql('public.orders', 'user_id', 'public.users', 'id');
+		expect(sql).toBe('ALTER TABLE public.orders ADD FOREIGN KEY (user_id) REFERENCES public.users (id);');
+	});
+});
+
+describe('removeForeignKeyStatement', () => {
+	it('removes ALTER TABLE ADD FOREIGN KEY statement', () => {
+		const sql = `
+CREATE TABLE public.users (
+  id BIGINT PRIMARY KEY
+);
+
+CREATE TABLE public.orders (
+  id BIGINT PRIMARY KEY,
+  user_id BIGINT
+);
+
+ALTER TABLE public.orders ADD FOREIGN KEY (user_id) REFERENCES public.users (id);
+`;
+
+		const fk = {
+			sourceTable: 'public.orders',
+			sourceColumn: 'user_id',
+			targetTable: 'public.users',
+			targetColumn: 'id'
+		};
+
+		const result = removeForeignKeyStatement(sql, fk);
+		expect(result).toHaveProperty('sql');
+		expect(result.sql).not.toContain('ALTER TABLE');
+		expect(result.sql).toContain('CREATE TABLE public.users');
+		expect(result.sql).toContain('CREATE TABLE public.orders');
+	});
+
+	it('removes ALTER TABLE with CONSTRAINT name', () => {
+		const sql = `
+CREATE TABLE public.users (id BIGINT PRIMARY KEY);
+CREATE TABLE public.orders (id BIGINT PRIMARY KEY, user_id BIGINT);
+ALTER TABLE public.orders ADD CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES public.users (id);
+`;
+
+		const fk = {
+			sourceTable: 'public.orders',
+			sourceColumn: 'user_id',
+			targetTable: 'public.users',
+			targetColumn: 'id'
+		};
+
+		const result = removeForeignKeyStatement(sql, fk);
+		expect(result).toHaveProperty('sql');
+		expect(result.sql).not.toContain('FOREIGN KEY');
+	});
+
+	it('removes ALTER TABLE without target column specified', () => {
+		const sql = `
+CREATE TABLE public.users (id BIGINT PRIMARY KEY);
+CREATE TABLE public.orders (id BIGINT PRIMARY KEY, user_id BIGINT);
+ALTER TABLE public.orders ADD FOREIGN KEY (user_id) REFERENCES public.users;
+`;
+
+		const fk = {
+			sourceTable: 'public.orders',
+			sourceColumn: 'user_id',
+			targetTable: 'public.users',
+			targetColumn: 'id'
+		};
+
+		const result = removeForeignKeyStatement(sql, fk);
+		expect(result).toHaveProperty('sql');
+		expect(result.sql).not.toContain('FOREIGN KEY');
+		expect(result.sql).not.toContain('REFERENCES');
+	});
+
+	it('removes inline REFERENCES from CREATE TABLE', () => {
+		const sql = `
+CREATE TABLE public.users (
+  id BIGINT PRIMARY KEY
+);
+
+CREATE TABLE public.orders (
+  id BIGINT PRIMARY KEY,
+  user_id BIGINT REFERENCES public.users (id)
+);
+`;
+
+		const fk = {
+			sourceTable: 'public.orders',
+			sourceColumn: 'user_id',
+			targetTable: 'public.users',
+			targetColumn: 'id'
+		};
+
+		const result = removeForeignKeyStatement(sql, fk);
+		expect(result).toHaveProperty('sql');
+		expect(result.sql).not.toContain('REFERENCES');
+		expect(result.sql).toContain('user_id BIGINT');
+	});
+
+	it('removes inline REFERENCES with ON DELETE CASCADE', () => {
+		const sql = `
+CREATE TABLE public.users (id BIGINT PRIMARY KEY);
+CREATE TABLE public.orders (
+  id BIGINT PRIMARY KEY,
+  user_id BIGINT REFERENCES public.users (id) ON DELETE CASCADE
+);
+`;
+
+		const fk = {
+			sourceTable: 'public.orders',
+			sourceColumn: 'user_id',
+			targetTable: 'public.users',
+			targetColumn: 'id'
+		};
+
+		const result = removeForeignKeyStatement(sql, fk);
+		expect(result).toHaveProperty('sql');
+		expect(result.sql).not.toContain('REFERENCES');
+		expect(result.sql).not.toContain('ON DELETE');
+		expect(result.sql).toContain('user_id BIGINT');
+	});
+
+	it('returns error when FK not found', () => {
+		const sql = `
+CREATE TABLE public.users (id BIGINT PRIMARY KEY);
+CREATE TABLE public.orders (id BIGINT PRIMARY KEY, user_id BIGINT);
+`;
+
+		const fk = {
+			sourceTable: 'public.orders',
+			sourceColumn: 'user_id',
+			targetTable: 'public.users',
+			targetColumn: 'id'
+		};
+
+		const result = removeForeignKeyStatement(sql, fk);
+		expect(result).toHaveProperty('error');
+	});
+
+	it('only removes FK from the correct schema, not similar tables in other schemas', () => {
+		const sql = `
+CREATE TABLE asset.datum_type (id BIGINT PRIMARY KEY);
+CREATE TABLE party.datum_type (id BIGINT PRIMARY KEY);
+CREATE TABLE asset.datum (id BIGINT PRIMARY KEY, datum_type_id BIGINT);
+CREATE TABLE party.datum (id BIGINT PRIMARY KEY, datum_type_id BIGINT);
+ALTER TABLE asset.datum ADD FOREIGN KEY (datum_type_id) REFERENCES asset.datum_type;
+ALTER TABLE party.datum ADD FOREIGN KEY (datum_type_id) REFERENCES party.datum_type;
+`;
+
+		const fk = {
+			sourceTable: 'asset.datum',
+			sourceColumn: 'datum_type_id',
+			targetTable: 'asset.datum_type',
+			targetColumn: 'id'
+		};
+
+		const result = removeForeignKeyStatement(sql, fk);
+		expect(result).toHaveProperty('sql');
+		// Should NOT contain the asset FK anymore
+		expect(result.sql).not.toContain('ALTER TABLE asset.datum');
+		// Should still contain the party FK
+		expect(result.sql).toContain('ALTER TABLE party.datum ADD FOREIGN KEY (datum_type_id) REFERENCES party.datum_type');
 	});
 });

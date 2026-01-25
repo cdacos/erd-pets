@@ -20,6 +20,8 @@
    *   onShowTableSql: (qualifiedName: string) => void,
    *   onCenterTable: (qualifiedName: string) => void,
    *   onCreateTable: () => void,
+   *   onCreateRelationship: () => void,
+   *   onDeleteRelationship: (fk: ForeignKey) => void,
    *   focusSearch?: number
    * }} */
   let {
@@ -32,6 +34,8 @@
     onShowTableSql,
     onCenterTable,
     onCreateTable,
+    onCreateRelationship,
+    onDeleteRelationship,
     focusSearch = 0,
   } = $props();
 
@@ -114,7 +118,7 @@
     {#if mode === 'tables'}
       <TableListPanel {tables} {visibleTables} onToggle={onTableToggle} onShowSql={onShowTableSql} {onCenterTable} onCreate={onCreateTable} {focusSearch} />
     {:else if mode === 'relationships'}
-      <RelationshipListPanel {foreignKeys} {visibleTables} {onCenterTable} {focusSearch} />
+      <RelationshipListPanel {foreignKeys} {visibleTables} {onCenterTable} onCreate={onCreateRelationship} onDelete={onDeleteRelationship} {focusSearch} />
     {:else if mode === 'notes'}
       <NotesPanel />
     {:else if mode === 'arrows'}

@@ -9,12 +9,16 @@
    *   foreignKeys: ForeignKey[],
    *   visibleTables: Set<string>,
    *   onCenterTable: (qualifiedName: string) => void,
+   *   onCreate: () => void,
+   *   onDelete: (fk: ForeignKey) => void,
    *   focusSearch?: number
    * }} */
   let {
     foreignKeys,
     visibleTables,
     onCenterTable,
+    onCreate,
+    onDelete,
     focusSearch = 0,
   } = $props();
 
@@ -52,6 +56,11 @@
       placeholder="Search relationships..."
       bind:value={searchQuery}
     />
+    <button class="new-btn" title="Create new relationship" onclick={onCreate}>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
   </div>
   {#if filteredForeignKeys.length === 0}
     <div class="empty-state">
@@ -101,6 +110,15 @@
                 <path d="M8 2v2M8 12v2M2 8h2M12 8h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
               </svg>
             </button>
+            <button
+              class="icon-btn delete-btn"
+              title="Delete relationship"
+              onclick={() => onDelete(fk)}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </button>
           </div>
         </li>
       {/each}
@@ -119,10 +137,13 @@
   .search-box {
     padding: 8px;
     border-bottom: 1px solid var(--color-border);
+    display: flex;
+    gap: 6px;
   }
 
   .search-box input {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     padding: 6px 8px;
     border: 1px solid var(--color-border-strong);
     border-radius: 4px;
@@ -130,6 +151,26 @@
     background: var(--color-surface);
     color: var(--color-text-primary);
     box-sizing: border-box;
+  }
+
+  .new-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 4px;
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .new-btn:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text-primary);
   }
 
   .search-box input::placeholder {
@@ -239,5 +280,10 @@
   .icon-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+  }
+
+  .icon-btn.delete-btn:hover {
+    background: rgba(220, 38, 38, 0.1);
+    color: #dc2626;
   }
 </style>

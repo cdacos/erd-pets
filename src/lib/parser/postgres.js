@@ -667,3 +667,163 @@ export const CREATE_TABLE_TEMPLATE = `CREATE TABLE schema.table_name (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   name TEXT
 );`;
+
+/**
+ * Generate an ALTER TABLE ADD FOREIGN KEY statement
+ * @param {string} sourceTable - Fully qualified source table name
+ * @param {string} sourceColumn - Column in the source table
+ * @param {string} targetTable - Fully qualified target table name
+ * @param {string} targetColumn - Column in the target table
+ * @returns {string}
+ */
+export function generateForeignKeySql(sourceTable, sourceColumn, targetTable, targetColumn) {
+	return `ALTER TABLE ${sourceTable} ADD FOREIGN KEY (${sourceColumn}) REFERENCES ${targetTable} (${targetColumn});`;
+}
+
+/**
+ * Find and remove a foreign key statement from SQL content.
+ * Supports both ALTER TABLE ADD FOREIGN KEY and inline REFERENCES in CREATE TABLE.
+ * Returns the modified SQL content, or an error if the FK could not be found.
+ *
+ * @param {string} sqlContent - The full SQL content
+ * @param {ForeignKey} fk - The foreign key to remove
+ * @returns {{ sql: string } | { error: string }}
+ */
+export function removeForeignKeyStatement(sqlContent, fk) {
+	const [sourceSchema, sourceTableName] = fk.sourceTable.split('.');
+	const [targetSchema, targetTableName] = fk.targetTable.split('.');
+
+	// Build patterns that match either "schema.table" or just "table" (for default schema)
+	// Also handle quoted identifiers like "schema"."table"
+	const sourceTablePattern = buildTableNamePattern(sourceSchema, sourceTableName);
+	const targetTablePattern = buildTableNamePattern(targetSchema, targetTableName);
+
+	// First, try to find ALTER TABLE ... ADD FOREIGN KEY statement
+	// Note: target column (id) is optional in SQL - if omitted, it references the PK
+	const alterTablePattern = new RegExp(
+		`ALTER\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?${sourceTablePattern}\\s+ADD\\s+(?:CONSTRAINT\\s+[\\w"]+\\s+)?FOREIGN\\s+KEY\\s*\\(\\s*"?${escapeRegex(fk.sourceColumn)}"?\\s*\\)\\s*REFERENCES\\s+${targetTablePattern}(?:\\s*\\(\\s*"?(?:${escapeRegex(fk.targetColumn)})?"?\\s*\\))?[^;]*;`,
+		'gi'
+	);
+
+	const alterMatches = [...sqlContent.matchAll(alterTablePattern)];
+
+	if (alterMatches.length > 0) {
+		// Remove ALTER TABLE statements from end to start
+		const rangesToRemove = alterMatches
+			.map((m) => ({ start: m.index, end: m.index + m[0].length }))
+			.sort((a, b) => b.start - a.start);
+
+		let newSqlContent = sqlContent;
+		for (const range of rangesToRemove) {
+			newSqlContent = removeRangeWithWhitespace(newSqlContent, range.start, range.end);
+		}
+
+		return { sql: newSqlContent.replace(/\n{3,}/g, '\n\n').trim() + '\n' };
+	}
+
+	// Try to find inline REFERENCES in CREATE TABLE
+	// First, find the CREATE TABLE for the source table
+	const createTablePattern = new RegExp(
+		`CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?${sourceTablePattern}\\s*\\([^;]+\\)\\s*;`,
+		'gis'
+	);
+
+	const createMatch = createTablePattern.exec(sqlContent);
+	if (!createMatch) {
+		return { error: `Could not find CREATE TABLE for ${fk.sourceTable} in the SQL.` };
+	}
+
+	const createTableStart = createMatch.index;
+	const createTableSql = createMatch[0];
+
+	// Find the column definition line that contains our source column and the REFERENCES
+	// Pattern: column_name TYPE ... REFERENCES target
+	const columnWithRefPattern = new RegExp(
+		`("?${escapeRegex(fk.sourceColumn)}"?\\s+[^,)]+?)((?:CONSTRAINT\\s+[\\w"]+\\s+)?REFERENCES\\s+${targetTablePattern}(?:\\s*\\(\\s*"?(?:${escapeRegex(fk.targetColumn)})?"?\\s*\\))?(?:\\s+(?:ON\\s+(?:DELETE|UPDATE)\\s+(?:CASCADE|RESTRICT|NO\\s+ACTION|SET\\s+NULL|SET\\s+DEFAULT)))*)`,
+		'gi'
+	);
+
+	const columnMatch = columnWithRefPattern.exec(createTableSql);
+	if (!columnMatch) {
+		// Try table-level FOREIGN KEY constraint: FOREIGN KEY (column) REFERENCES table (column)
+		// May be preceded by CONSTRAINT name
+		const tableConstraintPattern = new RegExp(
+			`,?\\s*(?:CONSTRAINT\\s+[\\w"]+\\s+)?FOREIGN\\s+KEY\\s*\\(\\s*"?${escapeRegex(fk.sourceColumn)}"?\\s*\\)\\s*REFERENCES\\s+${targetTablePattern}(?:\\s*\\(\\s*"?(?:${escapeRegex(fk.targetColumn)})?"?\\s*\\))?(?:\\s+(?:ON\\s+(?:DELETE|UPDATE)\\s+(?:CASCADE|RESTRICT|NO\\s+ACTION|SET\\s+NULL|SET\\s+DEFAULT)))*`,
+			'gi'
+		);
+
+		const constraintMatch = tableConstraintPattern.exec(createTableSql);
+		if (!constraintMatch) {
+			return { error: `Could not find FOREIGN KEY definition for column ${fk.sourceColumn} in the SQL.` };
+		}
+
+		// Remove the table-level constraint
+		const matchStartInCreate = constraintMatch.index;
+		const absoluteStart = createTableStart + matchStartInCreate;
+		const matchLength = constraintMatch[0].length;
+
+		const newSqlContent = sqlContent.slice(0, absoluteStart) + sqlContent.slice(absoluteStart + matchLength);
+		return { sql: newSqlContent.replace(/\n{3,}/g, '\n\n').trim() + '\n' };
+	}
+
+	// Remove just the REFERENCES clause from the column definition
+	const beforeRef = columnMatch[1];
+	const refClause = columnMatch[2];
+	const fullMatch = columnMatch[0];
+
+	// Calculate positions in the original SQL
+	const matchStartInCreate = columnMatch.index;
+	const absoluteStart = createTableStart + matchStartInCreate;
+
+	// Replace the full match with just the part before REFERENCES (trimmed)
+	const replacement = beforeRef.trimEnd();
+	const newSqlContent = sqlContent.slice(0, absoluteStart) + replacement + sqlContent.slice(absoluteStart + fullMatch.length);
+
+	return { sql: newSqlContent.replace(/\n{3,}/g, '\n\n').trim() + '\n' };
+}
+
+/**
+ * Remove a range from content, cleaning up surrounding whitespace.
+ * @param {string} content
+ * @param {number} start
+ * @param {number} end
+ * @returns {string}
+ */
+function removeRangeWithWhitespace(content, start, end) {
+	// Expand to include trailing newlines
+	while (end < content.length && (content[end] === '\n' || content[end] === '\r')) {
+		end++;
+	}
+
+	// Expand to include leading newlines (but keep one)
+	while (start > 0 && (content[start - 1] === '\n' || content[start - 1] === '\r')) {
+		start--;
+	}
+	if (start > 0 && content[start] === '\n') {
+		start++;
+	}
+
+	return content.slice(0, start) + content.slice(end);
+}
+
+/**
+ * Escape special regex characters in a string.
+ * @param {string} str
+ * @returns {string}
+ */
+function escapeRegex(str) {
+	return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Build a regex pattern that matches a qualified table name.
+ * Matches: schema.table, "schema"."table", "schema".table, schema."table", or just table
+ * @param {string} schema
+ * @param {string} tableName
+ * @returns {string}
+ */
+function buildTableNamePattern(schema, tableName) {
+	const schemaPattern = `(?:"?${escapeRegex(schema)}"?\\.)?`;
+	const tablePattern = `"?${escapeRegex(tableName)}"?`;
+	return schemaPattern + tablePattern;
+}
