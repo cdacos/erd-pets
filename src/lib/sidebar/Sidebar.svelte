@@ -16,7 +16,8 @@
    *   visibleTables: Set<string>,
    *   onTableToggle: (qualifiedName: string, visible: boolean) => void,
    *   onShowTableSql: (qualifiedName: string) => void,
-   *   onCenterTable: (qualifiedName: string) => void
+   *   onCenterTable: (qualifiedName: string) => void,
+   *   onCreateTable: () => void
    * }} */
   let {
     mode,
@@ -26,6 +27,7 @@
     onTableToggle,
     onShowTableSql,
     onCenterTable,
+    onCreateTable,
   } = $props();
 
   /** @type {{ mode: SidebarMode, label: string, icon: string }[]} */
@@ -105,7 +107,7 @@
 
   <div class="sidebar-content">
     {#if mode === 'tables'}
-      <TableListPanel {tables} {visibleTables} onToggle={onTableToggle} onShowSql={onShowTableSql} {onCenterTable} />
+      <TableListPanel {tables} {visibleTables} onToggle={onTableToggle} onShowSql={onShowTableSql} {onCenterTable} onCreate={onCreateTable} />
     {:else if mode === 'relationships'}
       <RelationshipListPanel />
     {:else if mode === 'notes'}

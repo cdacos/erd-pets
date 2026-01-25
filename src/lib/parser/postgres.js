@@ -659,3 +659,11 @@ function parseAlterTable(stream, tableMap, foreignKeys, errors) {
 
 	stream.match('PUNCTUATION', ';');
 }
+
+/**
+ * Template for a new CREATE TABLE statement
+ */
+export const CREATE_TABLE_TEMPLATE = `CREATE TABLE schema.table_name (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name TEXT
+);`;

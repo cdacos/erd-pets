@@ -8,7 +8,8 @@
    *   visibleTables: Set<string>,
    *   onToggle: (qualifiedName: string, visible: boolean) => void,
    *   onShowSql: (qualifiedName: string) => void,
-   *   onCenterTable: (qualifiedName: string) => void
+   *   onCenterTable: (qualifiedName: string) => void,
+   *   onCreate: () => void
    * }} */
   let {
     tables,
@@ -16,6 +17,7 @@
     onToggle,
     onShowSql,
     onCenterTable,
+    onCreate,
   } = $props();
 
   let searchQuery = $state('');
@@ -34,6 +36,11 @@
       placeholder="Search tables..."
       bind:value={searchQuery}
     />
+    <button class="new-btn" title="Create new table" onclick={onCreate}>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
   </div>
   <ul class="table-list">
     {#each filteredTables as table (table.qualifiedName)}
@@ -63,7 +70,7 @@
           </button>
           <button
             class="icon-btn"
-            title="Show SQL"
+            title="Edit DDL"
             onclick={() => onShowSql(table.qualifiedName)}
           >
             <!-- Code/SQL icon -->
@@ -104,10 +111,13 @@
   .search-box {
     padding: 8px;
     border-bottom: 1px solid var(--color-border);
+    display: flex;
+    gap: 6px;
   }
 
   .search-box input {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     padding: 6px 8px;
     border: 1px solid var(--color-border-strong);
     border-radius: 4px;
@@ -115,6 +125,26 @@
     background: var(--color-surface);
     color: var(--color-text-primary);
     box-sizing: border-box;
+  }
+
+  .new-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 4px;
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .new-btn:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text-primary);
   }
 
   .search-box input::placeholder {

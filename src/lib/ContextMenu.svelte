@@ -6,11 +6,12 @@
    * @property {string[]} tableNames - Names of the selected tables
    * @property {string | undefined} currentColor - Current header color (common color if multiple)
    * @property {(color: string | undefined) => void} onColorChange - Color change callback
+   * @property {(tableName: string) => void} onEditDdl - Edit DDL callback
    * @property {() => void} onClose - Close menu callback
    */
 
   /** @type {ContextMenuProps} */
-  let { x, y, tableNames, currentColor, onColorChange, onClose } = $props();
+  let { x, y, tableNames, currentColor, onColorChange, onEditDdl, onClose } = $props();
 
   // Display text for header
   let headerText = $derived(
@@ -56,6 +57,16 @@
   function resetColor() {
     onColorChange(undefined);
     onClose();
+  }
+
+  /**
+   * Handle Edit DDL click.
+   */
+  function handleEditDdl() {
+    if (tableNames.length === 1) {
+      onEditDdl(tableNames[0]);
+      onClose();
+    }
   }
 
   /**
@@ -116,6 +127,16 @@
   {#if currentColor}
     <button class="menu-item" onclick={resetColor}>
       Reset to Default
+    </button>
+  {/if}
+
+  {#if tableNames.length === 1}
+    <div class="menu-divider"></div>
+    <button class="menu-item" onclick={handleEditDdl}>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <path d="M5 4L2 8l3 4M11 4l3 4-3 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Edit DDL
     </button>
   {/if}
 </div>
@@ -212,8 +233,16 @@
     pointer-events: none;
   }
 
+  .menu-divider {
+    height: 1px;
+    background: var(--color-border);
+    margin: 4px 0;
+  }
+
   .menu-item {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     width: 100%;
     padding: 8px 12px;
     text-align: left;
@@ -226,5 +255,10 @@
 
   .menu-item:hover {
     background: var(--color-surface-hover);
+  }
+
+  .menu-item svg {
+    color: var(--color-text-muted);
+    flex-shrink: 0;
   }
 </style>

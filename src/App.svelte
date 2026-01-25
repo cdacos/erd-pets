@@ -13,8 +13,10 @@
   import Toast from './lib/Toast.svelte';
   import DiagramToolbar from './lib/DiagramToolbar.svelte';
   import ConfirmDialog from './lib/ConfirmDialog.svelte';
+  import CreateTableDialog from './lib/CreateTableDialog.svelte';
   import Sidebar from './lib/sidebar/Sidebar.svelte';
   import ContextMenu from './lib/ContextMenu.svelte';
+  import PaneContextMenu from './lib/PaneContextMenu.svelte';
   import FlowInstanceCapture from './lib/FlowInstanceCapture.svelte';
   import { circularLayout } from './lib/layouts/circular.js';
   import { hierarchicalLayout } from './lib/layouts/hierarchical.js';
@@ -86,6 +88,13 @@
 
   let showLayoutConfirm = $state(false);
   let showRefreshConfirm = $state(false);
+  let showCreateTableDialog = $state(false);
+
+  /** @type {string} */
+  let editingTableName = $state('');
+
+  /** @type {string} */
+  let editingTableSql = $state('');
 
   /** @type {import('./lib/DiagramToolbar.svelte').EdgeStyle} */
   let edgeStyle = $state('rounded');
@@ -137,6 +146,9 @@
 
   /** @type {{ x: number, y: number, tableNames: string[] } | null} */
   let contextMenu = $state(null);
+
+  /** @type {{ x: number, y: number } | null} */
+  let paneContextMenu = $state(null);
 
   /** @type {string[]} */
   let selectedTableNames = $derived(
@@ -238,6 +250,7 @@
    */
   function handleNodeContextMenu({ event, node }) {
     event.preventDefault();
+    paneContextMenu = null; // Close pane context menu if open
     const tableName = node.id;
     // If the clicked table is part of a selection, use all selected tables
     // Otherwise just use the clicked table
@@ -253,6 +266,7 @@
    */
   function handleSelectionContextMenu({ event, nodes: selectedNodes }) {
     event.preventDefault();
+    paneContextMenu = null; // Close pane context menu if open
     const tableNames = selectedNodes.map((n) => n.id);
     if (tableNames.length > 0) {
       contextMenu = { x: event.clientX, y: event.clientY, tableNames };
@@ -260,10 +274,21 @@
   }
 
   /**
-   * Close the context menu.
+   * Handle right-click on the pane (canvas background).
+   * @param {{ event: MouseEvent }} param
+   */
+  function handlePaneContextMenu({ event }) {
+    event.preventDefault();
+    contextMenu = null; // Close table context menu if open
+    paneContextMenu = { x: event.clientX, y: event.clientY };
+  }
+
+  /**
+   * Close all context menus.
    */
   function closeContextMenu() {
     contextMenu = null;
+    paneContextMenu = null;
   }
 
   /**
@@ -798,6 +823,127 @@
   }
 
   /**
+   * Open the create table dialog (for new table).
+   */
+  function handleCreateTable() {
+    if (!sqlHandle) {
+      showToast('No SQL file loaded. Open a diagram first.', 'error');
+      return;
+    }
+    editingTableName = '';
+    editingTableSql = '';
+    showCreateTableDialog = true;
+  }
+
+  /**
+   * Handle CREATE TABLE dialog submission.
+   * Either inserts a new table or replaces an existing one.
+   * @param {string} newTableSql
+   */
+  async function handleCreateTableSubmit(newTableSql) {
+    showCreateTableDialog = false;
+
+    if (!sqlHandle) {
+      showToast('No SQL file loaded.', 'error');
+      return;
+    }
+
+    const isEditing = !!editingTableName;
+
+    try {
+      let newSqlContent;
+      let tableToCenter = '';
+
+      if (isEditing) {
+        // Edit mode: replace existing CREATE TABLE statement
+        const extracted = extractTableDdl(editingTableName);
+        if (!extracted) {
+          showToast(`Could not find CREATE TABLE for "${editingTableName}".`, 'error');
+          return;
+        }
+
+        const before = sqlContent.slice(0, extracted.start);
+        const after = sqlContent.slice(extracted.end);
+        newSqlContent = before + newTableSql + after;
+        tableToCenter = editingTableName;
+      } else {
+        // Create mode: insert after last CREATE TABLE, before first ALTER TABLE
+        const existingTableNames = new Set(parseResult?.tables.map((t) => t.qualifiedName) ?? []);
+
+        const createTableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[\w."]+\s*\([^)]*(?:\([^)]*\)[^)]*)*\)\s*;/gi;
+        const alterTableRegex = /ALTER\s+TABLE\s+/i;
+
+        let lastCreateTableEnd = 0;
+        let match;
+
+        while ((match = createTableRegex.exec(sqlContent)) !== null) {
+          lastCreateTableEnd = match.index + match[0].length;
+        }
+
+        const alterMatch = alterTableRegex.exec(sqlContent);
+        const firstAlterStart = alterMatch ? alterMatch.index : sqlContent.length;
+
+        let insertionPoint;
+        if (lastCreateTableEnd > 0) {
+          insertionPoint = lastCreateTableEnd;
+        } else if (alterMatch) {
+          insertionPoint = firstAlterStart;
+        } else {
+          insertionPoint = sqlContent.length;
+        }
+
+        const before = sqlContent.slice(0, insertionPoint);
+        const after = sqlContent.slice(insertionPoint);
+        newSqlContent = before + '\n\n' + newTableSql + '\n' + after;
+
+        // We'll find the new table after parsing
+        parseResult = parsePostgresSQL(newSqlContent);
+        const newTable = parseResult.tables.find((t) => !existingTableNames.has(t.qualifiedName));
+        if (newTable) {
+          tableToCenter = newTable.qualifiedName;
+        }
+      }
+
+      // Save to SQL file
+      await saveToFile(sqlHandle, newSqlContent);
+      sqlContent = newSqlContent;
+
+      // Re-parse and refresh diagram
+      parseResult = parsePostgresSQL(sqlContent);
+
+      if (parseResult.errors.length > 0) {
+        for (const error of parseResult.errors) {
+          showToast(error.message || String(error), 'error');
+        }
+      }
+
+      // Re-render current diagram with preserved positions
+      if (diagramFile && selectedDiagramId) {
+        const diagram = diagramFile.diagrams.find((d) => d.id === selectedDiagramId);
+        if (diagram) {
+          const existingPositions = getNodePositions();
+          convertToFlowWithDiagram(diagram, parseResult.tables, parseResult.foreignKeys, existingPositions);
+        }
+      }
+
+      showToast(isEditing ? 'Table updated.' : 'Table created.', 'success');
+
+      // Center on the table after rendering
+      if (tableToCenter && flowInstance) {
+        requestAnimationFrame(() => {
+          handleCenterTable(tableToCenter);
+        });
+      }
+
+      // Clear editing state
+      editingTableName = '';
+      editingTableSql = '';
+    } catch (err) {
+      showToast(err.message || 'Failed to save table.', 'error');
+    }
+  }
+
+  /**
    * Handle layout button click from toolbar.
    * Shows confirmation dialog before applying.
    * @param {import('./lib/DiagramToolbar.svelte').LayoutType} layoutType
@@ -902,31 +1048,70 @@
   }
 
   /**
-   * Show SQL definition for a table (generates CREATE TABLE statement from parsed data).
+   * Extract a CREATE TABLE statement from SQL content for a specific table.
+   * @param {string} qualifiedName - e.g. "public.users"
+   * @returns {{ sql: string, start: number, end: number } | null}
+   */
+  function extractTableDdl(qualifiedName) {
+    const [schema, tableName] = qualifiedName.split('.');
+
+    // Build pattern to match CREATE TABLE with this name
+    // Handles: schema.name, "schema"."name", schema."name", etc.
+    const schemaPattern = schema === 'public'
+      ? `(?:public\\.|"public"\\.|)`
+      : `(?:${schema}\\.|"${schema}"\\.)`;
+    const namePattern = `(?:${tableName}|"${tableName}")`;
+    const pattern = new RegExp(
+      `CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?${schemaPattern}${namePattern}\\s*\\(`,
+      'gi'
+    );
+
+    const match = pattern.exec(sqlContent);
+    if (!match) return null;
+
+    const start = match.index;
+    let pos = match.index + match[0].length;
+    let depth = 1;
+
+    // Find matching closing paren
+    while (pos < sqlContent.length && depth > 0) {
+      if (sqlContent[pos] === '(') depth++;
+      else if (sqlContent[pos] === ')') depth--;
+      pos++;
+    }
+
+    // Skip to semicolon
+    while (pos < sqlContent.length && sqlContent[pos] !== ';') {
+      pos++;
+    }
+    if (sqlContent[pos] === ';') pos++;
+
+    return {
+      sql: sqlContent.slice(start, pos).trim(),
+      start,
+      end: pos
+    };
+  }
+
+  /**
+   * Open DDL editor for a table.
    * @param {string} qualifiedName
    */
   function handleShowTableSql(qualifiedName) {
-    if (!parseResult) return;
-
-    const table = parseResult.tables.find((t) => t.qualifiedName === qualifiedName);
-    if (!table) {
-      showToast(`Table "${qualifiedName}" not found.`, 'error');
+    if (!sqlContent) {
+      showToast('No SQL file loaded.', 'error');
       return;
     }
 
-    // Generate a CREATE TABLE statement from parsed data
-    const columnDefs = table.columns.map((col) => {
-      const pk = col.isPrimaryKey ? ' PRIMARY KEY' : '';
-      return `  ${col.name} ${col.type}${pk}`;
-    });
+    const extracted = extractTableDdl(qualifiedName);
+    if (!extracted) {
+      showToast(`Could not find CREATE TABLE for "${qualifiedName}".`, 'error');
+      return;
+    }
 
-    const sql = `CREATE TABLE ${table.qualifiedName} (\n${columnDefs.join(',\n')}\n);`;
-
-    // Copy to clipboard
-    navigator.clipboard.writeText(sql).then(
-      () => showToast(`SQL for "${qualifiedName}" copied to clipboard.`, 'success'),
-      () => showToast('Failed to copy to clipboard.', 'error')
-    );
+    editingTableName = qualifiedName;
+    editingTableSql = extracted.sql;
+    showCreateTableDialog = true;
   }
 
   /**
@@ -1113,6 +1298,7 @@
         onTableToggle={handleTableVisibilityToggle}
         onShowTableSql={handleShowTableSql}
         onCenterTable={handleCenterTable}
+        onCreateTable={handleCreateTable}
       />
     {/if}
     <main>
@@ -1127,6 +1313,7 @@
         onnodecontextmenu={handleNodeContextMenu}
         onselectioncontextmenu={handleSelectionContextMenu}
         onpaneclick={closeContextMenu}
+        onpanecontextmenu={handlePaneContextMenu}
       >
         <Controls />
         <MiniMap />
@@ -1145,6 +1332,16 @@
     tableNames={contextMenu.tableNames}
     currentColor={getTableColor(contextMenu.tableNames)}
     onColorChange={(color) => handleTableColorChange(contextMenu.tableNames, color)}
+    onEditDdl={handleShowTableSql}
+    onClose={closeContextMenu}
+  />
+{/if}
+
+{#if paneContextMenu}
+  <PaneContextMenu
+    x={paneContextMenu.x}
+    y={paneContextMenu.y}
+    onCreateTable={handleCreateTable}
     onClose={closeContextMenu}
   />
 {/if}
@@ -1165,6 +1362,18 @@
   confirmLabel="Refresh"
   onConfirm={applyRefresh}
   onCancel={cancelRefresh}
+/>
+
+<CreateTableDialog
+  open={showCreateTableDialog}
+  initialSql={editingTableSql}
+  editingTable={editingTableName}
+  onSubmit={handleCreateTableSubmit}
+  onCancel={() => {
+    showCreateTableDialog = false;
+    editingTableName = '';
+    editingTableSql = '';
+  }}
 />
 
 <style>
