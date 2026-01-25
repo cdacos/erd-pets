@@ -96,6 +96,11 @@
   /** @type {string} */
   let editingTableSql = $state('');
 
+  /** @type {string} */
+  let tableToDelete = $state('');
+
+  let showDropTableConfirm = $state(false);
+
   /** @type {import('./lib/DiagramToolbar.svelte').EdgeStyle} */
   let edgeStyle = $state('rounded');
 
@@ -1115,6 +1120,163 @@
   }
 
   /**
+   * Request to drop a table (shows confirmation).
+   * @param {string} qualifiedName
+   */
+  function handleDropTableRequest(qualifiedName) {
+    tableToDelete = qualifiedName;
+    showDropTableConfirm = true;
+  }
+
+  /**
+   * Find all ALTER TABLE statements that reference a given table.
+   * Returns array of { start, end } positions to remove.
+   * @param {string} qualifiedName
+   * @returns {{ start: number, end: number }[]}
+   */
+  function findRelatedAlterTables(qualifiedName) {
+    const [schema, tableName] = qualifiedName.split('.');
+    const results = [];
+
+    // Pattern to match ALTER TABLE statements
+    const alterPattern = /ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?[\w."]+[^;]*;/gi;
+
+    // Patterns to check if the ALTER TABLE references our table
+    const schemaPattern = schema === 'public'
+      ? `(?:public\\.|"public"\\.|)`
+      : `(?:${schema}\\.|"${schema}"\\.)`;
+    const namePattern = `(?:${tableName}|"${tableName}")`;
+
+    // Match ALTER TABLE on our table itself
+    const alterOnTablePattern = new RegExp(
+      `ALTER\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?${schemaPattern}${namePattern}\\s`,
+      'i'
+    );
+
+    // Match REFERENCES to our table (foreign keys pointing to it)
+    const referencesPattern = new RegExp(
+      `REFERENCES\\s+${schemaPattern}${namePattern}(?:\\s|\\(|$)`,
+      'i'
+    );
+
+    let match;
+    while ((match = alterPattern.exec(sqlContent)) !== null) {
+      const statement = match[0];
+      // Check if this ALTER TABLE is on our table or references our table
+      if (alterOnTablePattern.test(statement) || referencesPattern.test(statement)) {
+        results.push({
+          start: match.index,
+          end: match.index + statement.length
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Actually drop the table and related ALTER TABLEs.
+   */
+  async function applyDropTable() {
+    showDropTableConfirm = false;
+    showCreateTableDialog = false;
+
+    if (!sqlHandle || !tableToDelete) {
+      showToast('No table to delete.', 'error');
+      return;
+    }
+
+    try {
+      // Find the CREATE TABLE statement
+      const createTable = extractTableDdl(tableToDelete);
+      if (!createTable) {
+        showToast(`Could not find CREATE TABLE for "${tableToDelete}".`, 'error');
+        return;
+      }
+
+      // Find related ALTER TABLE statements
+      const alterTables = findRelatedAlterTables(tableToDelete);
+
+      // Collect all ranges to remove, sorted by position descending
+      // (so we can remove from end to start without shifting positions)
+      const rangesToRemove = [
+        { start: createTable.start, end: createTable.end },
+        ...alterTables
+      ].sort((a, b) => b.start - a.start);
+
+      // Remove ranges from end to start
+      let newSqlContent = sqlContent;
+      for (const range of rangesToRemove) {
+        // Also remove leading/trailing whitespace and newlines
+        let start = range.start;
+        let end = range.end;
+
+        // Expand to include trailing newlines
+        while (end < newSqlContent.length && (newSqlContent[end] === '\n' || newSqlContent[end] === '\r')) {
+          end++;
+        }
+
+        // Expand to include leading newlines (but keep one)
+        while (start > 0 && (newSqlContent[start - 1] === '\n' || newSqlContent[start - 1] === '\r')) {
+          start--;
+        }
+        // Keep at least one newline before if there's content before
+        if (start > 0 && newSqlContent[start] === '\n') {
+          start++;
+        }
+
+        newSqlContent = newSqlContent.slice(0, start) + newSqlContent.slice(end);
+      }
+
+      // Clean up multiple consecutive blank lines
+      newSqlContent = newSqlContent.replace(/\n{3,}/g, '\n\n').trim() + '\n';
+
+      // Save to SQL file
+      await saveToFile(sqlHandle, newSqlContent);
+      sqlContent = newSqlContent;
+
+      // Re-parse and refresh diagram
+      parseResult = parsePostgresSQL(sqlContent);
+
+      if (parseResult.errors.length > 0) {
+        for (const error of parseResult.errors) {
+          showToast(error.message || String(error), 'error');
+        }
+      }
+
+      // Re-render current diagram with preserved positions
+      if (diagramFile && selectedDiagramId) {
+        const diagram = diagramFile.diagrams.find((d) => d.id === selectedDiagramId);
+        if (diagram) {
+          const existingPositions = getNodePositions();
+          convertToFlowWithDiagram(diagram, parseResult.tables, parseResult.foreignKeys, existingPositions);
+        }
+      }
+
+      const removedCount = alterTables.length;
+      const message = removedCount > 0
+        ? `Dropped "${tableToDelete}" and ${removedCount} related ALTER TABLE statement${removedCount > 1 ? 's' : ''}.`
+        : `Dropped "${tableToDelete}".`;
+      showToast(message, 'success');
+
+      // Clear state
+      tableToDelete = '';
+      editingTableName = '';
+      editingTableSql = '';
+    } catch (err) {
+      showToast(err.message || 'Failed to drop table.', 'error');
+    }
+  }
+
+  /**
+   * Cancel drop table confirmation.
+   */
+  function cancelDropTable() {
+    showDropTableConfirm = false;
+    tableToDelete = '';
+  }
+
+  /**
    * Center the diagram viewport on a specific table.
    * @param {string} qualifiedName
    */
@@ -1333,6 +1495,7 @@
     currentColor={getTableColor(contextMenu.tableNames)}
     onColorChange={(color) => handleTableColorChange(contextMenu.tableNames, color)}
     onEditDdl={handleShowTableSql}
+    onDropTable={handleDropTableRequest}
     onClose={closeContextMenu}
   />
 {/if}
@@ -1364,11 +1527,21 @@
   onCancel={cancelRefresh}
 />
 
+<ConfirmDialog
+  open={showDropTableConfirm}
+  title="Drop Table"
+  message={`This will permanently remove "${tableToDelete}" and any foreign key constraints referencing it from the SQL file. This cannot be undone.`}
+  confirmLabel="Drop Table"
+  onConfirm={applyDropTable}
+  onCancel={cancelDropTable}
+/>
+
 <CreateTableDialog
   open={showCreateTableDialog}
   initialSql={editingTableSql}
   editingTable={editingTableName}
   onSubmit={handleCreateTableSubmit}
+  onDropTable={handleDropTableRequest}
   onCancel={() => {
     showCreateTableDialog = false;
     editingTableName = '';

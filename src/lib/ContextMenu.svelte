@@ -7,11 +7,12 @@
    * @property {string | undefined} currentColor - Current header color (common color if multiple)
    * @property {(color: string | undefined) => void} onColorChange - Color change callback
    * @property {(tableName: string) => void} onEditDdl - Edit DDL callback
+   * @property {(tableName: string) => void} onDropTable - Drop table callback
    * @property {() => void} onClose - Close menu callback
    */
 
   /** @type {ContextMenuProps} */
-  let { x, y, tableNames, currentColor, onColorChange, onEditDdl, onClose } = $props();
+  let { x, y, tableNames, currentColor, onColorChange, onEditDdl, onDropTable, onClose } = $props();
 
   // Display text for header
   let headerText = $derived(
@@ -65,6 +66,16 @@
   function handleEditDdl() {
     if (tableNames.length === 1) {
       onEditDdl(tableNames[0]);
+      onClose();
+    }
+  }
+
+  /**
+   * Handle Drop Table click.
+   */
+  function handleDropTable() {
+    if (tableNames.length === 1) {
+      onDropTable(tableNames[0]);
       onClose();
     }
   }
@@ -137,6 +148,12 @@
         <path d="M5 4L2 8l3 4M11 4l3 4-3 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
       Edit DDL
+    </button>
+    <button class="menu-item danger" onclick={handleDropTable}>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <path d="M3 4h10M6 4V3a1 1 0 011-1h2a1 1 0 011 1v1M5 4v9a1 1 0 001 1h4a1 1 0 001-1V4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Drop Table
     </button>
   {/if}
 </div>
@@ -260,5 +277,17 @@
   .menu-item svg {
     color: var(--color-text-muted);
     flex-shrink: 0;
+  }
+
+  .menu-item.danger {
+    color: #dc2626;
+  }
+
+  .menu-item.danger svg {
+    color: #dc2626;
+  }
+
+  .menu-item.danger:hover {
+    background: rgba(220, 38, 38, 0.1);
   }
 </style>

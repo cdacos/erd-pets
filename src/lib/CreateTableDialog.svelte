@@ -8,6 +8,7 @@
    *   initialSql?: string,
    *   editingTable?: string,
    *   onSubmit: (sql: string) => void,
+   *   onDropTable?: (tableName: string) => void,
    *   onCancel: () => void
    * }}
    */
@@ -16,6 +17,7 @@
     initialSql = '',
     editingTable = '',
     onSubmit,
+    onDropTable,
     onCancel,
   } = $props();
 
@@ -112,8 +114,15 @@
         ></textarea>
         <p class="hint">Press <kbd>Cmd</kbd>+<kbd>Enter</kbd> to {isEditing ? 'save' : 'create'}.</p>
         <div class="actions">
-          <button type="button" class="cancel" onclick={onCancel}>Cancel</button>
-          <button type="submit" class="confirm" disabled={!sql.trim()}>{submitLabel}</button>
+          {#if isEditing && onDropTable}
+            <button type="button" class="danger" onclick={() => onDropTable(editingTable)}>
+              Drop Table
+            </button>
+          {/if}
+          <div class="actions-right">
+            <button type="button" class="cancel" onclick={onCancel}>Cancel</button>
+            <button type="submit" class="confirm" disabled={!sql.trim()}>{submitLabel}</button>
+          </div>
         </div>
       </form>
     </div>
@@ -194,9 +203,15 @@
 
   .actions {
     display: flex;
-    gap: 12px;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
     margin-top: 8px;
+  }
+
+  .actions-right {
+    display: flex;
+    gap: 12px;
+    margin-left: auto;
   }
 
   button {
@@ -229,5 +244,15 @@
   .confirm:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .danger {
+    background: transparent;
+    border-color: #dc2626;
+    color: #dc2626;
+  }
+
+  .danger:hover {
+    background: rgba(220, 38, 38, 0.1);
   }
 </style>
