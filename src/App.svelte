@@ -1464,6 +1464,7 @@
         mode={sidebarMode}
         onModeChange={(mode) => sidebarMode = mode}
         tables={parseResult?.tables ?? []}
+        foreignKeys={parseResult?.foreignKeys ?? []}
         visibleTables={visibleTableNames}
         onTableToggle={handleTableVisibilityToggle}
         onShowTableSql={handleShowTableSql}

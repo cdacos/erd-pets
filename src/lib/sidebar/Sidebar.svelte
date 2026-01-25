@@ -1,6 +1,7 @@
 <script>
   /**
    * @typedef {import('../parser/types.js').Table} Table
+   * @typedef {import('../parser/types.js').ForeignKey} ForeignKey
    * @typedef {'tables' | 'relationships' | 'notes' | 'arrows'} SidebarMode
    */
 
@@ -13,6 +14,7 @@
    *   mode: SidebarMode,
    *   onModeChange: (mode: SidebarMode) => void,
    *   tables: Table[],
+   *   foreignKeys: ForeignKey[],
    *   visibleTables: Set<string>,
    *   onTableToggle: (qualifiedName: string, visible: boolean) => void,
    *   onShowTableSql: (qualifiedName: string) => void,
@@ -24,6 +26,7 @@
     mode,
     onModeChange,
     tables,
+    foreignKeys,
     visibleTables,
     onTableToggle,
     onShowTableSql,
@@ -40,7 +43,7 @@
     { mode: 'arrows', label: 'Arrows', icon: 'arrow' },
   ];
 
-  let width = $state(250);
+  let width = $state(500);
   let isResizing = $state(false);
 
   /**
@@ -111,7 +114,7 @@
     {#if mode === 'tables'}
       <TableListPanel {tables} {visibleTables} onToggle={onTableToggle} onShowSql={onShowTableSql} {onCenterTable} onCreate={onCreateTable} {focusSearch} />
     {:else if mode === 'relationships'}
-      <RelationshipListPanel />
+      <RelationshipListPanel {foreignKeys} {visibleTables} {onCenterTable} {focusSearch} />
     {:else if mode === 'notes'}
       <NotesPanel />
     {:else if mode === 'arrows'}
