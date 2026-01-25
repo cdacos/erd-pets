@@ -109,6 +109,9 @@
   /** @type {import('./lib/sidebar/Sidebar.svelte').SidebarMode} */
   let sidebarMode = $state('tables');
 
+  /** Incremented to trigger focus on table search input */
+  let focusTableSearch = $state(0);
+
   /** @type {boolean} */
   let isDarkMode = $state(false);
 
@@ -1422,6 +1425,11 @@
       } else if (e.key === 'b') {
         e.preventDefault();
         showSidebar = !showSidebar;
+      } else if (e.key === 'f') {
+        e.preventDefault();
+        showSidebar = true;
+        sidebarMode = 'tables';
+        focusTableSearch++;
       }
     }
 
@@ -1461,6 +1469,7 @@
         onShowTableSql={handleShowTableSql}
         onCenterTable={handleCenterTable}
         onCreateTable={handleCreateTable}
+        focusSearch={focusTableSearch}
       />
     {/if}
     <main>

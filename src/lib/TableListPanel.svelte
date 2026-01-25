@@ -1,4 +1,6 @@
 <script>
+  import { tick } from 'svelte';
+
   /**
    * @typedef {import('./parser/types.js').Table} Table
    */
@@ -9,7 +11,8 @@
    *   onToggle: (qualifiedName: string, visible: boolean) => void,
    *   onShowSql: (qualifiedName: string) => void,
    *   onCenterTable: (qualifiedName: string) => void,
-   *   onCreate: () => void
+   *   onCreate: () => void,
+   *   focusSearch?: number
    * }} */
   let {
     tables,
@@ -18,20 +21,33 @@
     onShowSql,
     onCenterTable,
     onCreate,
+    focusSearch = 0,
   } = $props();
 
   let searchQuery = $state('');
+  let searchInputEl = $state(null);
 
   let filteredTables = $derived(
     tables.filter((t) =>
       t.qualifiedName.toLowerCase().includes(searchQuery.toLowerCase())
     )
   );
+
+  // Focus search input when focusSearch changes
+  $effect(() => {
+    if (focusSearch > 0 && searchInputEl) {
+      tick().then(() => {
+        searchInputEl?.focus();
+        searchInputEl?.select();
+      });
+    }
+  });
 </script>
 
 <aside class="table-list-panel">
   <div class="search-box">
     <input
+      bind:this={searchInputEl}
       type="text"
       placeholder="Search tables..."
       bind:value={searchQuery}
