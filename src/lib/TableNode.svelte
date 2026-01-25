@@ -53,7 +53,23 @@
   <div class="table-header" style={headerStyle}>{data.label}</div>
   <div class="table-columns">
     {#each data.columns as column}
-      <div class="column">
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="column"
+        class:linking-target={data.isLinking}
+        oncontextmenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          data.onColumnContextMenu?.(e, data.label, column.name);
+        }}
+        onclick={(e) => {
+          if (data.isLinking) {
+            e.stopPropagation();
+            data.onColumnClick?.(data.label, column.name);
+          }
+        }}
+      >
         <span class="column-name">
           {#if column.isPrimaryKey}<span class="pk">PK</span>{/if}
           {#if column.isForeignKey}<span class="fk">FK</span>{/if}
@@ -101,6 +117,20 @@
 
   .column:hover {
     background: var(--color-surface-hover);
+  }
+
+  .column.linking-target {
+    cursor: crosshair;
+  }
+
+  .column.linking-target:hover {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .column.linking-target:hover .column-name,
+  .column.linking-target:hover .column-type {
+    color: white;
   }
 
   .column-name {

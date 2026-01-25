@@ -9,6 +9,10 @@
    * @type {{
    *   open: boolean,
    *   tables: Table[],
+   *   initialSourceTable?: string,
+   *   initialSourceColumn?: string,
+   *   initialTargetTable?: string,
+   *   initialTargetColumn?: string,
    *   onSubmit: (sourceTable: string, sourceColumn: string, targetTable: string, targetColumn: string) => void,
    *   onCancel: () => void
    * }}
@@ -16,6 +20,10 @@
   let {
     open = false,
     tables,
+    initialSourceTable = '',
+    initialSourceColumn = '',
+    initialTargetTable = '',
+    initialTargetColumn = '',
     onSubmit,
     onCancel,
   } = $props();
@@ -35,30 +43,16 @@
 
   let canSubmit = $derived(sourceTable && sourceColumn && targetTable && targetColumn);
 
-  // Reset form and focus when dialog opens
+  // Initialize form when dialog opens
   $effect(() => {
     if (open) {
-      sourceTable = '';
-      sourceColumn = '';
-      targetTable = '';
-      targetColumn = '';
+      sourceTable = initialSourceTable;
+      sourceColumn = initialSourceColumn;
+      targetTable = initialTargetTable;
+      targetColumn = initialTargetColumn;
       tick().then(() => {
         sourceSelectEl?.focus();
       });
-    }
-  });
-
-  // Reset source column when source table changes
-  $effect(() => {
-    if (sourceTable) {
-      sourceColumn = '';
-    }
-  });
-
-  // Reset target column when target table changes
-  $effect(() => {
-    if (targetTable) {
-      targetColumn = '';
     }
   });
 

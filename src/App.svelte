@@ -18,6 +18,7 @@
   import Sidebar from './lib/sidebar/Sidebar.svelte';
   import ContextMenu from './lib/ContextMenu.svelte';
   import PaneContextMenu from './lib/PaneContextMenu.svelte';
+  import ColumnContextMenu from './lib/ColumnContextMenu.svelte';
   import FlowInstanceCapture from './lib/FlowInstanceCapture.svelte';
   import { circularLayout } from './lib/layouts/circular.js';
   import { hierarchicalLayout } from './lib/layouts/hierarchical.js';
@@ -160,6 +161,21 @@
   /** @type {{ x: number, y: number } | null} */
   let paneContextMenu = $state(null);
 
+  /** @type {{ x: number, y: number, tableName: string, columnName: string } | null} */
+  let columnContextMenu = $state(null);
+
+  /** @type {{ sourceTable: string, sourceColumn: string } | null} */
+  let linkingState = $state(null);
+
+  /** @type {string} */
+  let prefilledSourceTable = $state('');
+  /** @type {string} */
+  let prefilledSourceColumn = $state('');
+  /** @type {string} */
+  let prefilledTargetTable = $state('');
+  /** @type {string} */
+  let prefilledTargetColumn = $state('');
+
   /** @type {string[]} */
   let selectedTableNames = $derived(
     nodes.filter((n) => n.selected).map((n) => n.id)
@@ -299,6 +315,77 @@
   function closeContextMenu() {
     contextMenu = null;
     paneContextMenu = null;
+    columnContextMenu = null;
+  }
+
+  /**
+   * Handle right-click on a column.
+   * @param {MouseEvent} event
+   * @param {string} tableName
+   * @param {string} columnName
+   */
+  function handleColumnContextMenu(event, tableName, columnName) {
+    contextMenu = null;
+    paneContextMenu = null;
+    columnContextMenu = { x: event.clientX, y: event.clientY, tableName, columnName };
+  }
+
+  /**
+   * Start linking mode from a column.
+   * @param {string} tableName
+   * @param {string} columnName
+   */
+  function startLinking(tableName, columnName) {
+    linkingState = { sourceTable: tableName, sourceColumn: columnName };
+    columnContextMenu = null;
+    // Update nodes to show linking UI
+    updateNodesForLinking(true);
+  }
+
+  /**
+   * Cancel linking mode.
+   */
+  function cancelLinking() {
+    linkingState = null;
+    updateNodesForLinking(false);
+  }
+
+  /**
+   * Complete linking by clicking on target column.
+   * @param {string} tableName
+   * @param {string} columnName
+   */
+  function completeLinking(tableName, columnName) {
+    if (!linkingState) return;
+
+    // Pre-fill the dialog
+    prefilledSourceTable = linkingState.sourceTable;
+    prefilledSourceColumn = linkingState.sourceColumn;
+    prefilledTargetTable = tableName;
+    prefilledTargetColumn = columnName;
+
+    // End linking mode
+    linkingState = null;
+    updateNodesForLinking(false);
+
+    // Open the dialog
+    showCreateRelationshipDialog = true;
+  }
+
+  /**
+   * Update all nodes with linking state and callbacks.
+   * @param {boolean} isLinking
+   */
+  function updateNodesForLinking(isLinking) {
+    nodes = nodes.map((node) => ({
+      ...node,
+      data: {
+        ...node.data,
+        isLinking,
+        onColumnContextMenu: handleColumnContextMenu,
+        onColumnClick: isLinking ? completeLinking : undefined,
+      },
+    }));
   }
 
   /**
@@ -408,6 +495,8 @@
             isPrimaryKey: col.isPrimaryKey,
             isForeignKey: fkColumns.has(`${table.qualifiedName}.${col.name}`),
           })),
+          isLinking: false,
+          onColumnContextMenu: handleColumnContextMenu,
         },
       };
     });
@@ -480,6 +569,8 @@
             isPrimaryKey: col.isPrimaryKey,
             isForeignKey: fkColumns.has(`${pos.qualifiedName}.${col.name}`),
           })) ?? [],
+          isLinking: false,
+          onColumnContextMenu: handleColumnContextMenu,
         },
       };
     });
@@ -977,6 +1068,10 @@
    */
   async function handleCreateRelationshipSubmit(sourceTable, sourceColumn, targetTable, targetColumn) {
     showCreateRelationshipDialog = false;
+    prefilledSourceTable = '';
+    prefilledSourceColumn = '';
+    prefilledTargetTable = '';
+    prefilledTargetColumn = '';
 
     if (!sqlHandle) {
       showToast('No SQL file loaded.', 'error');
@@ -1514,6 +1609,12 @@
      * @param {KeyboardEvent} e
      */
     function handleKeydown(e) {
+      // Escape key cancels linking mode
+      if (e.key === 'Escape' && linkingState) {
+        cancelLinking();
+        return;
+      }
+
       const isMod = e.metaKey || e.ctrlKey;
       if (!isMod) return;
 
@@ -1590,7 +1691,7 @@
         onnodedragstop={recalculateEdgeHandles}
         onnodecontextmenu={handleNodeContextMenu}
         onselectioncontextmenu={handleSelectionContextMenu}
-        onpaneclick={closeContextMenu}
+        onpaneclick={() => { closeContextMenu(); if (linkingState) cancelLinking(); }}
         onpanecontextmenu={handlePaneContextMenu}
       >
         <Controls />
@@ -1622,6 +1723,17 @@
     y={paneContextMenu.y}
     onCreateTable={handleCreateTable}
     onClose={closeContextMenu}
+  />
+{/if}
+
+{#if columnContextMenu}
+  <ColumnContextMenu
+    x={columnContextMenu.x}
+    y={columnContextMenu.y}
+    tableName={columnContextMenu.tableName}
+    columnName={columnContextMenu.columnName}
+    onCreateRelationship={() => startLinking(columnContextMenu.tableName, columnContextMenu.columnName)}
+    onClose={() => columnContextMenu = null}
   />
 {/if}
 
@@ -1668,8 +1780,18 @@
 <CreateRelationshipDialog
   open={showCreateRelationshipDialog}
   tables={parseResult?.tables ?? []}
+  initialSourceTable={prefilledSourceTable}
+  initialSourceColumn={prefilledSourceColumn}
+  initialTargetTable={prefilledTargetTable}
+  initialTargetColumn={prefilledTargetColumn}
   onSubmit={handleCreateRelationshipSubmit}
-  onCancel={() => showCreateRelationshipDialog = false}
+  onCancel={() => {
+    showCreateRelationshipDialog = false;
+    prefilledSourceTable = '';
+    prefilledSourceColumn = '';
+    prefilledTargetTable = '';
+    prefilledTargetColumn = '';
+  }}
 />
 
 <style>
