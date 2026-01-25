@@ -9,6 +9,7 @@
   import { toCanvas } from 'html-to-image';
   import '@xyflow/svelte/dist/style.css';
   import TableNode from './lib/TableNode.svelte';
+  import NoteNode from './lib/components/NoteNode.svelte';
   import TooltipEdge from './lib/TooltipEdge.svelte';
   import Toast from './lib/Toast.svelte';
   import DiagramToolbar from './lib/DiagramToolbar.svelte';
@@ -19,6 +20,7 @@
   import ContextMenu from './lib/ContextMenu.svelte';
   import PaneContextMenu from './lib/PaneContextMenu.svelte';
   import ColumnContextMenu from './lib/ColumnContextMenu.svelte';
+  import NoteContextMenu from './lib/components/NoteContextMenu.svelte';
   import FlowInstanceCapture from './lib/FlowInstanceCapture.svelte';
   import { circularLayout } from './lib/layouts/circular.js';
   import { hierarchicalLayout } from './lib/layouts/hierarchical.js';
@@ -38,10 +40,13 @@
     createDefaultDiagramFile,
     resolveRelation,
     setTableVisibility,
+    generateNoteId,
+    updateNotePositions,
   } from './lib/parser/diagram.js';
 
   const nodeTypes = {
     table: TableNode,
+    note: NoteNode,
   };
 
   const edgeTypes = {
@@ -84,6 +89,11 @@
   let parseResult = $state(null);
 
   let diagrams = $derived(diagramFile?.diagrams ?? []);
+
+  /** @type {import('./lib/parser/types.js').Note[]} */
+  let currentNotes = $derived(
+    diagramFile?.diagrams.find((d) => d.id === selectedDiagramId)?.notes ?? []
+  );
 
   /** @type {import('./lib/DiagramToolbar.svelte').LayoutType | null} */
   let pendingLayout = $state(null);
@@ -163,6 +173,9 @@
 
   /** @type {{ x: number, y: number, tableName: string, columnName: string } | null} */
   let columnContextMenu = $state(null);
+
+  /** @type {{ x: number, y: number, noteId: string, color: string | undefined } | null} */
+  let noteContextMenu = $state(null);
 
   /** @type {{ sourceTable: string, sourceColumn: string } | null} */
   let linkingState = $state(null);
@@ -267,16 +280,25 @@
   }
 
   /**
-   * Handle right-click on a node.
-   * @param {{ event: MouseEvent, node: { id: string } }} param
-   */
-  /**
    * Handle right-click on a single node.
-   * @param {{ event: MouseEvent, node: { id: string } }} param
+   * @param {{ event: MouseEvent, node: { id: string, type?: string, data?: any } }} param
    */
   function handleNodeContextMenu({ event, node }) {
     event.preventDefault();
-    paneContextMenu = null; // Close pane context menu if open
+    closeContextMenu();
+
+    // Check if this is a note node
+    if (node.type === 'note') {
+      noteContextMenu = {
+        x: event.clientX,
+        y: event.clientY,
+        noteId: node.data?.id,
+        color: node.data?.color,
+      };
+      return;
+    }
+
+    // Table node context menu
     const tableName = node.id;
     // If the clicked table is part of a selection, use all selected tables
     // Otherwise just use the clicked table
@@ -316,6 +338,7 @@
     contextMenu = null;
     paneContextMenu = null;
     columnContextMenu = null;
+    noteContextMenu = null;
   }
 
   /**
@@ -614,7 +637,25 @@
       })
       .filter((edge) => edge !== null);
 
-    nodes = newNodes;
+    // Build note nodes from diagram notes
+    const diagramNotes = diagram.notes ?? [];
+    const noteNodes = diagramNotes.map((note) => {
+      // Use existing position from canvas if available (for refresh scenarios)
+      const existingNotePos = existingPositions?.get(note.id);
+      return {
+        id: note.id,
+        type: 'note',
+        position: existingNotePos ?? { x: note.x, y: note.y },
+        data: {
+          id: note.id,
+          text: note.text,
+          color: note.color,
+          onTextChange: handleNoteTextChange,
+        },
+      };
+    });
+
+    nodes = [...newNodes, ...noteNodes];
     edges = newEdges;
   }
 
@@ -815,6 +856,19 @@
     try {
       // Collect positions from nodes
       const nodePositions = getNodePositions();
+
+      // Update note positions in the diagram file
+      const notePositions = getNotePositions();
+      const diagramIndex = diagramFile.diagrams.findIndex((d) => d.id === selectedDiagramId);
+      if (diagramIndex !== -1) {
+        const diagram = diagramFile.diagrams[diagramIndex];
+        if (diagram.notes && diagram.notes.length > 0) {
+          const updatedNotes = updateNotePositions(diagram.notes, notePositions);
+          const updatedDiagrams = [...diagramFile.diagrams];
+          updatedDiagrams[diagramIndex] = { ...diagram, notes: updatedNotes };
+          diagramFile = { ...diagramFile, diagrams: updatedDiagrams };
+        }
+      }
 
       // Serialize diagram file with updated positions
       const newContent = serializeDiagramFile(
@@ -1503,6 +1557,223 @@
     });
   }
 
+  // ============================================================================
+  // Note CRUD operations
+  // ============================================================================
+
+  /**
+   * Create a new note at the specified position.
+   * @param {number} screenX - Screen X coordinate
+   * @param {number} screenY - Screen Y coordinate
+   */
+  function handleCreateNote(screenX, screenY) {
+    if (!diagramFile || !selectedDiagramId) {
+      showToast('No diagram loaded.', 'error');
+      return;
+    }
+
+    // Convert screen coordinates to flow coordinates
+    const flowPos = flowInstance?.screenToFlowPosition({ x: screenX, y: screenY }) ?? { x: screenX, y: screenY };
+
+    const diagramIndex = diagramFile.diagrams.findIndex((d) => d.id === selectedDiagramId);
+    if (diagramIndex === -1) return;
+
+    const diagram = diagramFile.diagrams[diagramIndex];
+    const existingNotes = diagram.notes ?? [];
+
+    /** @type {import('./lib/parser/types.js').Note} */
+    const newNote = {
+      id: generateNoteId(existingNotes),
+      text: '',
+      x: Math.round(flowPos.x),
+      y: Math.round(flowPos.y),
+    };
+
+    // Update diagram file
+    const updatedNotes = [...existingNotes, newNote];
+    const updatedDiagrams = [...diagramFile.diagrams];
+    updatedDiagrams[diagramIndex] = { ...diagram, notes: updatedNotes };
+    diagramFile = { ...diagramFile, diagrams: updatedDiagrams };
+
+    // Add note node to canvas
+    const noteNode = {
+      id: newNote.id,
+      type: 'note',
+      position: { x: newNote.x, y: newNote.y },
+      data: {
+        id: newNote.id,
+        text: newNote.text,
+        color: newNote.color,
+        onTextChange: handleNoteTextChange,
+      },
+    };
+    nodes = [...nodes, noteNode];
+  }
+
+  /**
+   * Handle note text change from inline editing.
+   * @param {string} noteId
+   * @param {string} text
+   */
+  function handleNoteTextChange(noteId, text) {
+    if (!diagramFile || !selectedDiagramId) return;
+
+    const diagramIndex = diagramFile.diagrams.findIndex((d) => d.id === selectedDiagramId);
+    if (diagramIndex === -1) return;
+
+    const diagram = diagramFile.diagrams[diagramIndex];
+    const notes = diagram.notes ?? [];
+    const noteIndex = notes.findIndex((n) => n.id === noteId);
+    if (noteIndex === -1) return;
+
+    // Update note in diagram file
+    const updatedNotes = [...notes];
+    updatedNotes[noteIndex] = { ...notes[noteIndex], text };
+    const updatedDiagrams = [...diagramFile.diagrams];
+    updatedDiagrams[diagramIndex] = { ...diagram, notes: updatedNotes };
+    diagramFile = { ...diagramFile, diagrams: updatedDiagrams };
+
+    // Update node data
+    nodes = nodes.map((n) => {
+      if (n.id === noteId && n.type === 'note') {
+        return { ...n, data: { ...n.data, text } };
+      }
+      return n;
+    });
+  }
+
+  /**
+   * Handle note color change.
+   * @param {string} noteId
+   * @param {string | undefined} color
+   */
+  function handleNoteColorChange(noteId, color) {
+    if (!diagramFile || !selectedDiagramId) return;
+
+    const diagramIndex = diagramFile.diagrams.findIndex((d) => d.id === selectedDiagramId);
+    if (diagramIndex === -1) return;
+
+    const diagram = diagramFile.diagrams[diagramIndex];
+    const notes = diagram.notes ?? [];
+    const noteIndex = notes.findIndex((n) => n.id === noteId);
+    if (noteIndex === -1) return;
+
+    // Update note in diagram file
+    const updatedNotes = [...notes];
+    if (color === undefined) {
+      const { color: _, ...rest } = notes[noteIndex];
+      updatedNotes[noteIndex] = rest;
+    } else {
+      updatedNotes[noteIndex] = { ...notes[noteIndex], color };
+    }
+    const updatedDiagrams = [...diagramFile.diagrams];
+    updatedDiagrams[diagramIndex] = { ...diagram, notes: updatedNotes };
+    diagramFile = { ...diagramFile, diagrams: updatedDiagrams };
+
+    // Update node data
+    nodes = nodes.map((n) => {
+      if (n.id === noteId && n.type === 'note') {
+        return { ...n, data: { ...n.data, color } };
+      }
+      return n;
+    });
+  }
+
+  /**
+   * Delete a note.
+   * @param {string} noteId
+   */
+  function handleDeleteNote(noteId) {
+    if (!diagramFile || !selectedDiagramId) return;
+
+    const diagramIndex = diagramFile.diagrams.findIndex((d) => d.id === selectedDiagramId);
+    if (diagramIndex === -1) return;
+
+    const diagram = diagramFile.diagrams[diagramIndex];
+    const notes = diagram.notes ?? [];
+
+    // Remove note from diagram file
+    const updatedNotes = notes.filter((n) => n.id !== noteId);
+    const updatedDiagrams = [...diagramFile.diagrams];
+    updatedDiagrams[diagramIndex] = { ...diagram, notes: updatedNotes };
+    diagramFile = { ...diagramFile, diagrams: updatedDiagrams };
+
+    // Remove node from canvas
+    nodes = nodes.filter((n) => n.id !== noteId);
+  }
+
+  /**
+   * Center the diagram viewport on a specific note.
+   * @param {string} noteId
+   */
+  function handleCenterNote(noteId) {
+    const node = nodes.find((n) => n.id === noteId);
+    if (!node) {
+      showToast(`Note not found in diagram.`, 'error');
+      return;
+    }
+
+    if (!flowInstance) {
+      showToast('Flow not initialized yet.', 'error');
+      return;
+    }
+
+    flowInstance.fitView({
+      nodes: [node],
+      duration: 300,
+      padding: 0.5,
+      maxZoom: 1,
+    });
+  }
+
+  /**
+   * Trigger inline edit mode for a note.
+   * @param {string} noteId
+   */
+  function handleEditNote(noteId) {
+    // Find the note node element and trigger a double-click to enter edit mode
+    const nodeEl = document.querySelector(`[data-id="${noteId}"] .note-node`);
+    if (nodeEl) {
+      nodeEl.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    }
+  }
+
+  /**
+   * Get current note positions from nodes.
+   * @returns {Map<string, {x: number, y: number}>}
+   */
+  function getNotePositions() {
+    const notePositions = new Map();
+    for (const node of nodes) {
+      if (node.type === 'note') {
+        notePositions.set(node.id, node.position);
+      }
+    }
+    return notePositions;
+  }
+
+  /**
+   * Create note from sidebar (at center of viewport).
+   */
+  function handleCreateNoteFromSidebar() {
+    if (!flowInstance) {
+      showToast('Flow not initialized yet.', 'error');
+      return;
+    }
+    // Get viewport center
+    const viewport = flowInstance.getViewport();
+    const container = document.querySelector('.svelte-flow');
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+
+    // Convert to flow coordinates
+    const flowPos = flowInstance.screenToFlowPosition({ x: rect.left + centerX, y: rect.top + centerY });
+    handleCreateNote(rect.left + centerX, rect.top + centerY);
+  }
+
   /**
    * Get bounds of all nodes in flow coordinates, using actual rendered dimensions.
    * @returns {{ x: number, y: number, width: number, height: number } | null}
@@ -1677,6 +1948,11 @@
         onCreateTable={handleCreateTable}
         onCreateRelationship={handleCreateRelationship}
         onDeleteRelationship={handleDeleteRelationship}
+        notes={currentNotes}
+        onCenterNote={handleCenterNote}
+        onCreateNote={handleCreateNoteFromSidebar}
+        onEditNote={handleEditNote}
+        onDeleteNote={handleDeleteNote}
         focusSearch={focusTableSearch}
       />
     {/if}
@@ -1722,6 +1998,7 @@
     x={paneContextMenu.x}
     y={paneContextMenu.y}
     onCreateTable={handleCreateTable}
+    onCreateNote={handleCreateNote}
     onClose={closeContextMenu}
   />
 {/if}
@@ -1734,6 +2011,19 @@
     columnName={columnContextMenu.columnName}
     onCreateRelationship={() => startLinking(columnContextMenu.tableName, columnContextMenu.columnName)}
     onClose={() => columnContextMenu = null}
+  />
+{/if}
+
+{#if noteContextMenu}
+  <NoteContextMenu
+    x={noteContextMenu.x}
+    y={noteContextMenu.y}
+    noteId={noteContextMenu.noteId}
+    currentColor={noteContextMenu.color}
+    onColorChange={handleNoteColorChange}
+    onEdit={handleEditNote}
+    onDelete={handleDeleteNote}
+    onClose={() => noteContextMenu = null}
   />
 {/if}
 

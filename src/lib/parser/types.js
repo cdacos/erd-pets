@@ -101,12 +101,21 @@
  */
 
 /**
+ * @typedef {Object} Note
+ * @property {string} id
+ * @property {string} text
+ * @property {number} x
+ * @property {number} y
+ * @property {string} [color] - Hex color (default: #fef3c7)
+ */
+
+/**
  * @typedef {Object} DiagramDefinition
  * @property {string} id - Unique identifier within file
  * @property {string} title - Display name
  * @property {DiagramTableEntry[]} tables
  * @property {RelationRule[]} [relations] - FK edge styling rules
- * @property {any[]} [notes] - Phase 2
+ * @property {Note[]} [notes] - Sticky notes on the diagram
  * @property {any[]} [arrows] - Phase 2
  */
 

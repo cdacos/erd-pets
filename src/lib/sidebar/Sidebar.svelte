@@ -2,6 +2,7 @@
   /**
    * @typedef {import('../parser/types.js').Table} Table
    * @typedef {import('../parser/types.js').ForeignKey} ForeignKey
+   * @typedef {import('../parser/types.js').Note} Note
    * @typedef {'tables' | 'relationships' | 'notes' | 'arrows'} SidebarMode
    */
 
@@ -22,6 +23,11 @@
    *   onCreateTable: () => void,
    *   onCreateRelationship: () => void,
    *   onDeleteRelationship: (fk: ForeignKey) => void,
+   *   notes: Note[],
+   *   onCenterNote: (noteId: string) => void,
+   *   onCreateNote: () => void,
+   *   onEditNote: (noteId: string) => void,
+   *   onDeleteNote: (noteId: string) => void,
    *   focusSearch?: number
    * }} */
   let {
@@ -36,6 +42,11 @@
     onCreateTable,
     onCreateRelationship,
     onDeleteRelationship,
+    notes,
+    onCenterNote,
+    onCreateNote,
+    onEditNote,
+    onDeleteNote,
     focusSearch = 0,
   } = $props();
 
@@ -120,7 +131,7 @@
     {:else if mode === 'relationships'}
       <RelationshipListPanel {foreignKeys} {visibleTables} {onCenterTable} onCreate={onCreateRelationship} onDelete={onDeleteRelationship} {focusSearch} />
     {:else if mode === 'notes'}
-      <NotesPanel />
+      <NotesPanel {notes} onCenter={onCenterNote} onCreate={onCreateNote} onEdit={onEditNote} onDelete={onDeleteNote} {focusSearch} />
     {:else if mode === 'arrows'}
       <ArrowsPanel />
     {/if}

@@ -4,10 +4,11 @@
    *   x: number,
    *   y: number,
    *   onCreateTable: () => void,
+   *   onCreateNote: (x: number, y: number) => void,
    *   onClose: () => void
    * }}
    */
-  let { x, y, onCreateTable, onClose } = $props();
+  let { x, y, onCreateTable, onCreateNote, onClose } = $props();
 
   /**
    * Handle clicks outside the menu.
@@ -34,6 +35,11 @@
     onCreateTable();
     onClose();
   }
+
+  function handleCreateNote() {
+    onCreateNote(x, y);
+    onClose();
+  }
 </script>
 
 <svelte:window onclick={handleClickOutside} onkeydown={handleKeydown} />
@@ -48,6 +54,15 @@
       <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
     </svg>
     Create Table
+  </button>
+  <button class="menu-item" onclick={handleCreateNote}>
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <rect x="3" y="2" width="10" height="12" rx="1" stroke="currentColor" stroke-width="1.5"/>
+      <line x1="5" y1="5" x2="11" y2="5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="5" y1="8" x2="11" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="5" y1="11" x2="9" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    Add Note
   </button>
 </div>
 

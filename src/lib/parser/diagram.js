@@ -15,6 +15,7 @@
  * @typedef {import('./types.js').ParseError} ParseError
  * @typedef {import('./types.js').Table} Table
  * @typedef {import('./types.js').ForeignKey} ForeignKey
+ * @typedef {import('./types.js').Note} Note
  */
 
 /**
@@ -654,4 +655,38 @@ export function serializeDiagramFile(diagramFile, selectedDiagramId, nodePositio
   };
 
   return JSON.stringify(output, null, 2);
+}
+
+/**
+ * Generate a unique note ID.
+ * @param {Note[]} existingNotes
+ * @returns {string}
+ */
+export function generateNoteId(existingNotes) {
+  const existingIds = new Set(existingNotes.map((n) => n.id));
+  let counter = 1;
+  while (existingIds.has(`note-${counter}`)) {
+    counter++;
+  }
+  return `note-${counter}`;
+}
+
+/**
+ * Update note positions from canvas coordinates.
+ * @param {Note[]} notes - Original notes from diagram definition
+ * @param {Map<string, {x: number, y: number}>} positionMap - Current positions from canvas
+ * @returns {Note[]} - Notes with updated positions
+ */
+export function updateNotePositions(notes, positionMap) {
+  return notes.map((note) => {
+    const pos = positionMap.get(note.id);
+    if (pos) {
+      return {
+        ...note,
+        x: Math.round(pos.x),
+        y: Math.round(pos.y),
+      };
+    }
+    return note;
+  });
 }
