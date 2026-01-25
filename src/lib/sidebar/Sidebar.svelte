@@ -35,9 +35,38 @@
     { mode: 'notes', label: 'Notes', icon: 'note' },
     { mode: 'arrows', label: 'Arrows', icon: 'arrow' },
   ];
+
+  let width = $state(250);
+  let isResizing = $state(false);
+
+  /**
+   * @param {MouseEvent} e
+   */
+  function handleMouseDown(e) {
+    isResizing = true;
+    e.preventDefault();
+
+    const startX = e.clientX;
+    const startWidth = width;
+
+    function onMouseMove(/** @type {MouseEvent} */ e) {
+      const delta = e.clientX - startX;
+      const newWidth = Math.max(180, Math.min(600, startWidth + delta));
+      width = newWidth;
+    }
+
+    function onMouseUp() {
+      isResizing = false;
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    }
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }
 </script>
 
-<aside class="sidebar">
+<aside class="sidebar" class:resizing={isResizing} style="width: {width}px;">
   <nav class="sidebar-tabs">
     {#each tabs as tab (tab.mode)}
       <button
@@ -85,17 +114,45 @@
       <ArrowsPanel />
     {/if}
   </div>
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div
+    class="resize-handle"
+    onmousedown={handleMouseDown}
+    role="separator"
+    aria-orientation="vertical"
+  ></div>
 </aside>
 
 <style>
   .sidebar {
-    width: 250px;
-    min-width: 250px;
+    position: relative;
+    min-width: 180px;
+    max-width: 600px;
     background: var(--color-surface);
     border-right: 1px solid var(--color-border);
     display: flex;
     flex-direction: column;
     overflow: hidden;
+  }
+
+  .sidebar.resizing {
+    user-select: none;
+  }
+
+  .resize-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 4px;
+    height: 100%;
+    cursor: col-resize;
+    background: transparent;
+    transition: background-color 0.15s;
+  }
+
+  .resize-handle:hover,
+  .sidebar.resizing .resize-handle {
+    background: var(--color-primary);
   }
 
   .sidebar-tabs {
