@@ -184,8 +184,8 @@
   }
 
   .tab-btn.active {
-    color: var(--color-primary);
-    box-shadow: inset 0 -2px 0 var(--color-primary);
+    color: var(--color-accent);
+    box-shadow: inset 0 -2px 0 var(--color-accent);
   }
 
   .sidebar-content {

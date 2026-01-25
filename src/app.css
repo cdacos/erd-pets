@@ -192,3 +192,11 @@ html.dark .svelte-flow__minimap-node {
   fill: var(--color-surface-hover);
   stroke: var(--color-border);
 }
+
+html.dark .svelte-flow__attribution {
+  background: var(--color-surface);
+}
+
+html.dark .svelte-flow__attribution a {
+  color: var(--color-text-muted);
+}
