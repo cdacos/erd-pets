@@ -112,6 +112,11 @@ function validateDiagramFile(data) {
     errors.push({ message: 'Field "sql" cannot be empty' });
   }
 
+  // Validate optional dbType field
+  if ('dbType' in obj && typeof obj.dbType !== 'string') {
+    errors.push({ message: 'Field "dbType" must be a string' });
+  }
+
   // Validate diagrams field
   if (!('diagrams' in obj)) {
     errors.push({ message: 'Missing required field: "diagrams"' });
@@ -290,7 +295,13 @@ export function parseDiagramFile(content) {
     return { data: null, errors: validationErrors };
   }
 
-  return { data: /** @type {DiagramFile} */ (parsed), errors };
+  // Set default dbType if not provided
+  const result = /** @type {DiagramFile} */ (parsed);
+  if (!result.dbType) {
+    result.dbType = 'PostgreSQL';
+  }
+
+  return { data: result, errors };
 }
 
 /**
@@ -447,6 +458,7 @@ export function resolveDiagramTables(diagram, tables, existingPositions) {
 export function createDefaultDiagramFile(sqlFilename) {
   return {
     sql: sqlFilename,
+    dbType: 'PostgreSQL',
     diagrams: [
       {
         id: 'main',
@@ -575,6 +587,7 @@ export function serializeDiagramFile(diagramFile, selectedDiagramId, nodePositio
   // Deep clone to avoid mutating the original
   const output = {
     sql: diagramFile.sql,
+    ...(diagramFile.dbType ? { dbType: diagramFile.dbType } : {}),
     diagrams: diagramFile.diagrams.map((diagram) => {
       const isSelected = diagram.id === selectedDiagramId;
 
@@ -704,4 +717,30 @@ export function generateArrowId(existingArrows) {
     counter++;
   }
   return `arrow-${counter}`;
+}
+
+/**
+ * Generate a unique diagram ID from a title.
+ * @param {string} title
+ * @param {DiagramDefinition[]} existingDiagrams
+ * @returns {string}
+ */
+export function generateDiagramId(title, existingDiagrams) {
+  const existingIds = new Set(existingDiagrams.map((d) => d.id));
+  // Convert title to kebab-case id
+  let baseId = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  if (!baseId) {
+    baseId = 'diagram';
+  }
+
+  let id = baseId;
+  let counter = 1;
+  while (existingIds.has(id)) {
+    id = `${baseId}-${counter}`;
+    counter++;
+  }
+  return id;
 }

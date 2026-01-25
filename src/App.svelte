@@ -14,6 +14,7 @@
   import Toast from './lib/Toast.svelte';
   import DiagramToolbar from './lib/DiagramToolbar.svelte';
   import ConfirmDialog from './lib/ConfirmDialog.svelte';
+  import AddDiagramDialog from './lib/AddDiagramDialog.svelte';
   import CreateTableDialog from './lib/CreateTableDialog.svelte';
   import CreateRelationshipDialog from './lib/CreateRelationshipDialog.svelte';
   import Sidebar from './lib/sidebar/Sidebar.svelte';
@@ -43,6 +44,7 @@
     generateNoteId,
     updateNotePositions,
     generateArrowId,
+    generateDiagramId,
   } from './lib/parser/diagram.js';
 
   const nodeTypes = {
@@ -91,6 +93,8 @@
 
   let diagrams = $derived(diagramFile?.diagrams ?? []);
 
+  let dbType = $derived(diagramFile?.dbType ?? 'PostgreSQL');
+
   /** @type {import('./lib/parser/types.js').Note[]} */
   let currentNotes = $derived(
     diagramFile?.diagrams.find((d) => d.id === selectedDiagramId)?.notes ?? []
@@ -108,6 +112,7 @@
   let showRefreshConfirm = $state(false);
   let showCreateTableDialog = $state(false);
   let showCreateRelationshipDialog = $state(false);
+  let showAddDiagramDialog = $state(false);
 
   /** @type {string} */
   let editingTableName = $state('');
@@ -905,6 +910,52 @@
     if (diagram) {
       convertToFlowWithDiagram(diagram, parseResult.tables, parseResult.foreignKeys);
     }
+  }
+
+  /**
+   * Handle add diagram button click.
+   */
+  function handleAddDiagram() {
+    if (!diagramFile) {
+      showToast('No diagram file loaded.', 'error');
+      return;
+    }
+    showAddDiagramDialog = true;
+  }
+
+  /**
+   * Handle add diagram form submission.
+   * @param {string} title
+   */
+  function handleAddDiagramSubmit(title) {
+    showAddDiagramDialog = false;
+
+    if (!diagramFile || !parseResult) {
+      showToast('No diagram file loaded.', 'error');
+      return;
+    }
+
+    const id = generateDiagramId(title, diagramFile.diagrams);
+
+    // If this is the first/only diagram, use wildcard; otherwise empty
+    const isFirstDiagram = diagramFile.diagrams.length === 0;
+
+    /** @type {import('./lib/parser/types.js').DiagramDefinition} */
+    const newDiagram = {
+      id,
+      title,
+      tables: isFirstDiagram ? [{ name: '*' }] : [],
+    };
+
+    // Add the new diagram to the file
+    const updatedDiagrams = [...diagramFile.diagrams, newDiagram];
+    diagramFile = { ...diagramFile, diagrams: updatedDiagrams };
+
+    // Select the new diagram
+    selectedDiagramId = id;
+    convertToFlowWithDiagram(newDiagram, parseResult.tables, parseResult.foreignKeys);
+
+    showToast(`Created diagram "${title}".`, 'success');
   }
 
   /**
@@ -2166,11 +2217,13 @@
     onLayout={handleLayoutRequest}
     onEdgeStyleChange={handleEdgeStyleChange}
     onExport={handleExport}
+    onAddDiagram={handleAddDiagram}
     {diagrams}
     selectedDiagramId={selectedDiagramId}
     fileLoaded={!!diagramHandle}
     {diagramFileName}
     {sqlFileName}
+    {dbType}
     {edgeStyle}
     showSidebar={showSidebar}
     onToggleSidebar={() => showSidebar = !showSidebar}
@@ -2331,6 +2384,12 @@
     prefilledTargetTable = '';
     prefilledTargetColumn = '';
   }}
+/>
+
+<AddDiagramDialog
+  open={showAddDiagramDialog}
+  onSubmit={handleAddDiagramSubmit}
+  onCancel={() => showAddDiagramDialog = false}
 />
 
 <style>
