@@ -7,7 +7,7 @@
    * @typedef {'rounded' | 'bezier'} EdgeStyle
    */
 
-  /** @type {{ onNew: () => void, onLoad: () => void, onRefresh: () => void, onSave: () => void, onDiagramChange: (id: string) => void, onLayout: (type: LayoutType) => void, onEdgeStyleChange: (style: EdgeStyle) => void, onExport: (pixelRatio: number) => void, diagrams: DiagramDefinition[], selectedDiagramId: string, fileLoaded: boolean, diagramFileName: string, sqlFileName: string, edgeStyle: EdgeStyle, showSidebar: boolean, onToggleSidebar: () => void }} */
+  /** @type {{ onNew: () => void, onLoad: () => void, onRefresh: () => void, onSave: () => void, onDiagramChange: (id: string) => void, onLayout: (type: LayoutType) => void, onEdgeStyleChange: (style: EdgeStyle) => void, onExport: (pixelRatio: number | 'max') => void, diagrams: DiagramDefinition[], selectedDiagramId: string, fileLoaded: boolean, diagramFileName: string, sqlFileName: string, edgeStyle: EdgeStyle, showSidebar: boolean, onToggleSidebar: () => void }} */
   let {
     onNew,
     onLoad,
@@ -56,8 +56,8 @@
     const value = select.value;
     if (value === '1x') {
       onExport(1);
-    } else if (value === '2x') {
-      onExport(2);
+    } else if (value === 'max') {
+      onExport('max');
     }
     // Reset to placeholder after selection
     select.value = '';
@@ -87,7 +87,7 @@
   >
     <option value="">Export</option>
     <option value="1x">WebP (1x)</option>
-    <option value="2x">WebP (2x)</option>
+    <option value="max">WebP (max)</option>
   </select>
   <select
     class="layout-select"

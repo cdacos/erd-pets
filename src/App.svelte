@@ -2025,10 +2025,10 @@
   }
 
   /**
-   * Export diagram as lossless WebP image.
-   * @param {number} pixelRatio - 1 for standard, 2 for high-DPI/Retina
+   * Export diagram as WebP image.
+   * @param {number | 'max'} pixelRatioArg - 1 for standard, 'max' for highest that fits browser limits
    */
-  async function handleExport(pixelRatio) {
+  async function handleExport(pixelRatioArg) {
     if (nodes.length === 0) {
       showToast('No diagram to export.', 'error');
       return;
@@ -2054,6 +2054,28 @@
       // Get current background color from CSS variable
       const bgColor = getComputedStyle(document.documentElement).getPropertyValue('--color-bg').trim();
 
+      // Browser canvas limit (typically 16384px per dimension)
+      const maxCanvasDimension = 16384;
+
+      // Calculate pixel ratio
+      let pixelRatio;
+      if (pixelRatioArg === 'max') {
+        // Calculate maximum pixel ratio that fits within browser limits (with small margin)
+        const maxByWidth = (maxCanvasDimension - 100) / imageWidth;
+        const maxByHeight = (maxCanvasDimension - 100) / imageHeight;
+        // Use 2 decimal places, minimum 1x
+        pixelRatio = Math.max(1, Math.floor(Math.min(maxByWidth, maxByHeight) * 100) / 100);
+      } else {
+        pixelRatio = pixelRatioArg;
+        const canvasWidth = imageWidth * pixelRatio;
+        const canvasHeight = imageHeight * pixelRatio;
+
+        if (canvasWidth > maxCanvasDimension || canvasHeight > maxCanvasDimension) {
+          showToast(`Diagram too large for ${pixelRatio}x export. Try 1x instead.`, 'error');
+          return;
+        }
+      }
+
       const canvas = await toCanvas(viewportElement, {
         backgroundColor: bgColor,
         pixelRatio,
@@ -2066,15 +2088,23 @@
         },
       });
 
-      // Use lossy WebP with high quality
-      const dataUrl = canvas.toDataURL('image/webp', 0.92);
+      // Use lossy WebP with high quality, fall back to PNG if WebP fails
+      let dataUrl = canvas.toDataURL('image/webp', 0.92);
+      let format = 'webp';
+
+      // Check if WebP encoding failed (returns empty or minimal data URL)
+      if (!dataUrl || dataUrl === 'data:,' || dataUrl.length < 100) {
+        dataUrl = canvas.toDataURL('image/png');
+        format = 'png';
+      }
 
       const link = document.createElement('a');
-      link.download = `${diagramFileName.replace(/\.erd-pets\.json$/, '') || 'diagram'}.webp`;
+      link.download = `${diagramFileName.replace(/\.erd-pets\.json$/, '') || 'diagram'}.${format}`;
       link.href = dataUrl;
       link.click();
 
-      showToast(`Exported as WebP (${pixelRatio}x).`, 'success');
+      const formatNote = format === 'png' ? ' (as PNG, WebP unavailable)' : '';
+      showToast(`Exported as ${format.toUpperCase()} (${pixelRatio}x)${formatNote}.`, 'success');
     } catch (err) {
       showToast(err.message || 'Failed to export.', 'error');
     }
