@@ -7,7 +7,7 @@
    * @typedef {'rounded' | 'bezier'} EdgeStyle
    */
 
-  /** @type {{ onNew: () => void, onLoad: () => void, onRefresh: () => void, onSave: () => void, onDiagramChange: (id: string) => void, onLayout: (type: LayoutType) => void, onEdgeStyleChange: (style: EdgeStyle) => void, onExport: (pixelRatio: number | 'max') => void, diagrams: DiagramDefinition[], selectedDiagramId: string, fileLoaded: boolean, diagramFileName: string, sqlFileName: string, edgeStyle: EdgeStyle, showSidebar: boolean, onToggleSidebar: () => void }} */
+  /** @type {{ onNew: () => void, onLoad: () => void, onRefresh: () => void, onSave: () => void, onDiagramChange: (id: string) => void, onLayout: (type: LayoutType) => void, onEdgeStyleChange: (style: EdgeStyle) => void, onExport: (pixelRatio: number | 'max') => void, onAddDiagram: () => void, diagrams: DiagramDefinition[], selectedDiagramId: string, fileLoaded: boolean, diagramFileName: string, sqlFileName: string, dbType: string, edgeStyle: EdgeStyle, showSidebar: boolean, onToggleSidebar: () => void }} */
   let {
     onNew,
     onLoad,
@@ -17,11 +17,13 @@
     onLayout,
     onEdgeStyleChange,
     onExport,
+    onAddDiagram,
     diagrams,
     selectedDiagramId,
     fileLoaded,
     diagramFileName = '',
     sqlFileName = '',
+    dbType = 'PostgreSQL',
     edgeStyle = 'rounded',
     showSidebar = false,
     onToggleSidebar,
@@ -111,21 +113,33 @@
     <span class="file-names">
       {#if diagramFileName}<span class="file-name">{diagramFileName}</span>{/if}
       {#if diagramFileName && sqlFileName}<span class="separator">→</span>{/if}
-      {#if sqlFileName}<span class="file-name sql">{sqlFileName}</span>{/if}
+      {#if sqlFileName}<span class="file-name sql"><span class="db-type">{dbType}</span> {sqlFileName}</span>{/if}
     </span>
   {/if}
-  <select
-    value={selectedDiagramId}
-    onchange={(e) => onDiagramChange(e.target.value)}
-    disabled={diagrams.length === 0}
-  >
-    {#each diagrams as d}
-      <option value={d.id}>{d.title}</option>
-    {/each}
-    {#if diagrams.length === 0}
-      <option value="">No diagrams</option>
-    {/if}
-  </select>
+  <div class="diagram-selector">
+    <select
+      value={selectedDiagramId}
+      onchange={(e) => onDiagramChange(e.target.value)}
+      disabled={diagrams.length === 0}
+    >
+      {#each diagrams as d}
+        <option value={d.id}>{d.title}</option>
+      {/each}
+      {#if diagrams.length === 0}
+        <option value="">No diagrams</option>
+      {/if}
+    </select>
+    <button
+      class="add-diagram-btn"
+      onclick={onAddDiagram}
+      disabled={!fileLoaded}
+      title="Add new diagram"
+    >
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
 </header>
 
 <style>
@@ -200,5 +214,28 @@
 
   .separator {
     color: var(--color-text-muted);
+  }
+
+  .db-type {
+    color: var(--color-text-muted);
+    font-weight: 500;
+  }
+
+  .diagram-selector {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .add-diagram-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+    min-width: 32px;
+  }
+
+  .add-diagram-btn svg {
+    display: block;
   }
 </style>

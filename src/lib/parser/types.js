@@ -129,8 +129,13 @@
  */
 
 /**
+ * @typedef {'PostgreSQL'} DatabaseType
+ */
+
+/**
  * @typedef {Object} DiagramFile
  * @property {string} sql - Path to schema SQL file (relative to diagram file)
+ * @property {DatabaseType} [dbType] - Database type (defaults to 'PostgreSQL')
  * @property {DiagramDefinition[]} diagrams
  */
 
