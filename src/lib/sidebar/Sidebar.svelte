@@ -9,13 +9,23 @@
   import NotesPanel from './NotesPanel.svelte';
   import ArrowsPanel from './ArrowsPanel.svelte';
 
-  /** @type {{ mode: SidebarMode, onModeChange: (mode: SidebarMode) => void, tables: Table[], visibleTables: Set<string>, onTableToggle: (qualifiedName: string, visible: boolean) => void }} */
+  /** @type {{
+   *   mode: SidebarMode,
+   *   onModeChange: (mode: SidebarMode) => void,
+   *   tables: Table[],
+   *   visibleTables: Set<string>,
+   *   onTableToggle: (qualifiedName: string, visible: boolean) => void,
+   *   onShowTableSql: (qualifiedName: string) => void,
+   *   onCenterTable: (qualifiedName: string) => void
+   * }} */
   let {
     mode,
     onModeChange,
     tables,
     visibleTables,
     onTableToggle,
+    onShowTableSql,
+    onCenterTable,
   } = $props();
 
   /** @type {{ mode: SidebarMode, label: string, icon: string }[]} */
@@ -66,7 +76,7 @@
 
   <div class="sidebar-content">
     {#if mode === 'tables'}
-      <TableListPanel {tables} {visibleTables} onToggle={onTableToggle} />
+      <TableListPanel {tables} {visibleTables} onToggle={onTableToggle} onShowSql={onShowTableSql} {onCenterTable} />
     {:else if mode === 'relationships'}
       <RelationshipListPanel />
     {:else if mode === 'notes'}

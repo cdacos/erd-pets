@@ -15,6 +15,7 @@
   import ConfirmDialog from './lib/ConfirmDialog.svelte';
   import Sidebar from './lib/sidebar/Sidebar.svelte';
   import ContextMenu from './lib/ContextMenu.svelte';
+  import FlowInstanceCapture from './lib/FlowInstanceCapture.svelte';
   import { circularLayout } from './lib/layouts/circular.js';
   import { hierarchicalLayout } from './lib/layouts/hierarchical.js';
   import {
@@ -143,6 +144,9 @@
 
   /** @type {Set<string>} */
   let visibleTableNames = $derived(new Set(nodes.map((n) => n.id)));
+
+  /** @type {import('@xyflow/svelte').SvelteFlowInstance | null} */
+  let flowInstance = $state(null);
 
   /**
    * Determine the best handles for connecting two nodes based on their positions.
@@ -884,6 +888,59 @@
   }
 
   /**
+   * Show SQL definition for a table (generates CREATE TABLE statement from parsed data).
+   * @param {string} qualifiedName
+   */
+  function handleShowTableSql(qualifiedName) {
+    if (!parseResult) return;
+
+    const table = parseResult.tables.find((t) => t.qualifiedName === qualifiedName);
+    if (!table) {
+      showToast(`Table "${qualifiedName}" not found.`, 'error');
+      return;
+    }
+
+    // Generate a CREATE TABLE statement from parsed data
+    const columnDefs = table.columns.map((col) => {
+      const pk = col.isPrimaryKey ? ' PRIMARY KEY' : '';
+      return `  ${col.name} ${col.type}${pk}`;
+    });
+
+    const sql = `CREATE TABLE ${table.qualifiedName} (\n${columnDefs.join(',\n')}\n);`;
+
+    // Copy to clipboard
+    navigator.clipboard.writeText(sql).then(
+      () => showToast(`SQL for "${qualifiedName}" copied to clipboard.`, 'success'),
+      () => showToast('Failed to copy to clipboard.', 'error')
+    );
+  }
+
+  /**
+   * Center the diagram viewport on a specific table.
+   * @param {string} qualifiedName
+   */
+  function handleCenterTable(qualifiedName) {
+    const node = nodes.find((n) => n.id === qualifiedName);
+    if (!node) {
+      showToast(`Table "${qualifiedName}" not found in diagram.`, 'error');
+      return;
+    }
+
+    if (!flowInstance) {
+      showToast('Flow not initialized yet.', 'error');
+      return;
+    }
+
+    // Use fitView with a filter for just this node
+    flowInstance.fitView({
+      nodes: [node],
+      duration: 300,
+      padding: 0.5,
+      maxZoom: 1,
+    });
+  }
+
+  /**
    * Get bounds of all nodes in flow coordinates, using actual rendered dimensions.
    * @returns {{ x: number, y: number, width: number, height: number } | null}
    */
@@ -1040,6 +1097,8 @@
         tables={parseResult?.tables ?? []}
         visibleTables={visibleTableNames}
         onTableToggle={handleTableVisibilityToggle}
+        onShowTableSql={handleShowTableSql}
+        onCenterTable={handleCenterTable}
       />
     {/if}
     <main>
@@ -1057,6 +1116,7 @@
       >
         <Controls />
         <MiniMap />
+        <FlowInstanceCapture onCapture={(instance) => flowInstance = instance} />
       </SvelteFlow>
     </main>
   </div>
