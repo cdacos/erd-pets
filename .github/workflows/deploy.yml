@@ -1,0 +1,16 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Build and deploy
+        run: |
+          cd /srv/src/erd-pets
+          git pull
+          docker build -t erd-pets-build .
+          docker run --rm -v $(pwd)/dist:/out erd-pets-build sh -c "cp -r /app/dist/* /out/"
