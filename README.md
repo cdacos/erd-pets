@@ -1,8 +1,10 @@
-# erd-pets
+# ERD Pets - Database Diagram Editor
 
 Visual ERD editor that reads table definitions from SQL files.
 
-Philosophy: Similarly to the DevOps "pets vs cattle" metaphor, these are diagrams you layout manually, not having to rely on layout engines that can't understand intent.
+Philosophy: Similarly to the DevOps "pets vs cattle" metaphor, these are diagrams you layout manually, not having to rely on layout engines that can't understand intent. Albeit some layout algorithms (hierarchical, circular) are available, their intent is as an initial layout pending manual positioning.
+
+*Please note:* While functional for my specific use, this is still very much BETA software!
 
 ## Install
 
