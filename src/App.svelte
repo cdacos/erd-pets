@@ -85,6 +85,7 @@
   let pendingLayout = $state(null);
 
   let showLayoutConfirm = $state(false);
+  let showRefreshConfirm = $state(false);
 
   /** @type {import('./lib/DiagramToolbar.svelte').EdgeStyle} */
   let edgeStyle = $state('rounded');
@@ -715,16 +716,23 @@
 
   /**
    * Handle Refresh button click.
+   * Shows confirmation dialog before reloading.
    */
-  async function handleRefresh() {
+  function handleRefresh() {
     if (!diagramHandle || !sqlHandle) {
       showToast('No file loaded. Use Load Diagram first.', 'error');
       return;
     }
+    showRefreshConfirm = true;
+  }
+
+  /**
+   * Apply refresh after user confirmation.
+   */
+  async function applyRefresh() {
+    showRefreshConfirm = false;
 
     try {
-      // Preserve current positions for stability
-      const existingPositions = getNodePositions();
       const previousDiagramId = selectedDiagramId;
 
       // Refresh both files
@@ -769,18 +777,24 @@
           convertToFlowWithDiagram(
             diagram,
             parseResult.tables,
-            parseResult.foreignKeys,
-            existingPositions
+            parseResult.foreignKeys
           );
         }
       } else {
         convertToFlow(parseResult.tables, parseResult.foreignKeys);
       }
 
-      showToast('Refreshed from files.', 'success');
+      showToast('Diagram reloaded.', 'success');
     } catch (err) {
       showToast(err.message || 'Failed to refresh files.', 'error');
     }
+  }
+
+  /**
+   * Cancel refresh confirmation.
+   */
+  function cancelRefresh() {
+    showRefreshConfirm = false;
   }
 
   /**
@@ -1142,6 +1156,15 @@
   confirmLabel="Apply"
   onConfirm={applyLayout}
   onCancel={cancelLayout}
+/>
+
+<ConfirmDialog
+  open={showRefreshConfirm}
+  title="Refresh Diagram"
+  message="Refreshing will reload the diagram from disk. Unsaved changes will be lost."
+  confirmLabel="Refresh"
+  onConfirm={applyRefresh}
+  onCancel={cancelRefresh}
 />
 
 <style>
