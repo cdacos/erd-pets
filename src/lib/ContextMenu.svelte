@@ -130,8 +130,7 @@
     box-shadow: var(--shadow-lg, 0 10px 25px rgba(0, 0, 0, 0.2));
     min-width: 180px;
     padding: 8px 0;
-    font-family: system-ui, sans-serif;
-    font-size: 13px;
+    font-size: var(--font-size-base);
   }
 
   .menu-header {
@@ -150,7 +149,7 @@
   }
 
   .menu-label {
-    font-size: 11px;
+    font-size: var(--font-size-xs);
     font-weight: 500;
     color: var(--color-text-secondary);
     margin-bottom: 6px;
@@ -207,7 +206,7 @@
   }
 
   .color-picker-icon {
-    font-size: 14px;
+    font-size: var(--font-size-base);
     font-weight: 600;
     color: var(--color-text-secondary);
     pointer-events: none;
@@ -222,7 +221,7 @@
     border: none;
     color: var(--color-text-primary);
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--font-size-base);
   }
 
   .menu-item:hover {

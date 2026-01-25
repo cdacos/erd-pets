@@ -111,7 +111,7 @@
     padding: 6px 8px;
     border: 1px solid var(--color-border-strong);
     border-radius: 4px;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     background: var(--color-surface);
     color: var(--color-text-primary);
     box-sizing: border-box;
@@ -151,8 +151,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-family: ui-monospace, monospace;
-    font-size: 13px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-base);
     color: var(--color-text-primary);
   }
 

@@ -144,7 +144,7 @@
     border-radius: 4px;
     padding: 6px 12px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     color: var(--color-text-primary);
   }
 
@@ -177,7 +177,7 @@
     padding: 6px 12px;
     border: 1px solid var(--color-border-strong);
     border-radius: 4px;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     background: var(--color-surface);
     color: var(--color-text-primary);
   }
@@ -187,12 +187,12 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     color: var(--color-text-secondary);
   }
 
   .file-name {
-    font-family: ui-monospace, monospace;
+    font-family: var(--font-mono);
     background: var(--color-surface-hover);
     padding: 4px 8px;
     border-radius: 4px;

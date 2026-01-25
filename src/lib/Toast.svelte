@@ -39,7 +39,7 @@
     gap: 8px;
     padding: 12px 16px;
     border-radius: 6px;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     box-shadow: var(--shadow-md);
     animation: slideIn 0.2s ease-out;
   }
@@ -51,7 +51,7 @@
   .toast-dismiss {
     background: none;
     border: none;
-    font-size: 18px;
+    font-size: var(--font-size-xl);
     line-height: 1;
     cursor: pointer;
     opacity: 0.7;

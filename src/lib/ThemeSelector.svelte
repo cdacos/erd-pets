@@ -93,7 +93,7 @@
     padding: 6px 12px;
     border: 1px solid var(--color-border-strong);
     border-radius: 4px;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     background: var(--color-surface);
     color: var(--color-text-primary);
     cursor: pointer;

@@ -18,7 +18,7 @@
 
   .placeholder-text {
     color: var(--color-text-muted);
-    font-size: 13px;
+    font-size: var(--font-size-base);
     text-align: center;
   }
 </style>

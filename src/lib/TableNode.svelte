@@ -76,8 +76,7 @@
     border: 2px solid var(--color-table-border);
     border-radius: 4px;
     min-width: 150px;
-    font-family: system-ui, sans-serif;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     box-shadow: var(--shadow-sm);
   }
 
@@ -113,7 +112,7 @@
   }
 
   .pk, .fk {
-    font-size: 9px;
+    font-size: var(--font-size-xs);
     font-weight: 600;
     padding: 1px 3px;
     border-radius: 2px;

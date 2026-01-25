@@ -122,8 +122,7 @@
     color: var(--color-tooltip-text);
     padding: 8px 12px;
     border-radius: 6px;
-    font-family: system-ui, sans-serif;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     box-shadow: var(--shadow-md);
     width: fit-content;
     white-space: nowrap;
@@ -145,6 +144,6 @@
 
   .value {
     color: var(--color-tooltip-value);
-    font-family: ui-monospace, monospace;
+    font-family: var(--font-mono);
   }
 </style>

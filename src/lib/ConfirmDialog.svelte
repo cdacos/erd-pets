@@ -85,14 +85,14 @@
 
   h2 {
     margin: 0 0 12px 0;
-    font-size: 18px;
+    font-size: var(--font-size-xl);
     font-weight: 600;
     color: var(--color-text-heading);
   }
 
   p {
     margin: 0 0 20px 0;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     color: var(--color-text-secondary);
     line-height: 1.5;
   }
@@ -106,7 +106,7 @@
   button {
     padding: 8px 16px;
     border-radius: 6px;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     cursor: pointer;
     border: 1px solid transparent;
   }
