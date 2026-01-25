@@ -8,11 +8,12 @@
    * @property {(noteId: string, color: string | undefined) => void} onColorChange
    * @property {(noteId: string) => void} onEdit
    * @property {(noteId: string) => void} onDelete
+   * @property {(noteId: string) => void} onCreateArrow
    * @property {() => void} onClose
    */
 
   /** @type {NoteContextMenuProps} */
-  let { x, y, noteId, currentColor, onColorChange, onEdit, onDelete, onClose } = $props();
+  let { x, y, noteId, currentColor, onColorChange, onEdit, onDelete, onCreateArrow, onClose } = $props();
 
   const DEFAULT_COLOR = '#fef3c7';
 
@@ -60,6 +61,14 @@
    */
   function handleDelete() {
     onDelete(noteId);
+    onClose();
+  }
+
+  /**
+   * Handle create arrow click.
+   */
+  function handleCreateArrow() {
+    onCreateArrow(noteId);
     onClose();
   }
 
@@ -123,6 +132,13 @@
       <path d="M11.5 2.5l2 2M3 11l-1 3 3-1 8.5-8.5-2-2L3 11z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     Edit Text
+  </button>
+
+  <button class="menu-item" onclick={handleCreateArrow}>
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M3 8H13M13 8L9 4M13 8L9 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Create Arrow
   </button>
 
   <button class="menu-item danger" onclick={handleDelete}>

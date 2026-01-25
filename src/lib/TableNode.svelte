@@ -17,6 +17,15 @@
     return HEADER_HEIGHT + COLUMNS_TOP_PADDING + index * COLUMN_HEIGHT + COLUMN_HEIGHT / 2;
   }
 
+  /**
+   * Calculate vertical offset for center handles (used for arrows).
+   * @returns {number} - Pixel offset from top of node (center of table body)
+   */
+  function getCenterTop() {
+    const columnsHeight = data.columns.length * COLUMN_HEIGHT;
+    return HEADER_HEIGHT + COLUMNS_TOP_PADDING + columnsHeight / 2;
+  }
+
   // Build header style with optional custom color
   let headerStyle = $derived(data.color ? `background-color: ${data.color};` : '');
 </script>
@@ -49,7 +58,44 @@
   />
 {/each}
 
-<div class="table-node">
+<!-- Center handles for arrow connections -->
+<Handle
+  id="left-center-source"
+  type="source"
+  position={Position.Left}
+  style="top: {getCenterTop()}px"
+/>
+<Handle
+  id="left-center-target"
+  type="target"
+  position={Position.Left}
+  style="top: {getCenterTop()}px"
+/>
+<Handle
+  id="right-center-source"
+  type="source"
+  position={Position.Right}
+  style="top: {getCenterTop()}px"
+/>
+<Handle
+  id="right-center-target"
+  type="target"
+  position={Position.Right}
+  style="top: {getCenterTop()}px"
+/>
+
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+  class="table-node"
+  class:arrow-linking-target={data.isArrowLinking}
+  onclick={(e) => {
+    if (data.isArrowLinking) {
+      e.stopPropagation();
+      data.onTableClick?.(data.label);
+    }
+  }}
+>
   <div class="table-header" style={headerStyle}>{data.label}</div>
   <div class="table-columns">
     {#each data.columns as column}
@@ -157,5 +203,14 @@
   .fk {
     background: var(--color-fk-bg);
     color: var(--color-fk-text);
+  }
+
+  .table-node.arrow-linking-target {
+    cursor: crosshair;
+  }
+
+  .table-node.arrow-linking-target:hover {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-primary);
   }
 </style>

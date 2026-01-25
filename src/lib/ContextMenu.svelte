@@ -8,11 +8,12 @@
    * @property {(color: string | undefined) => void} onColorChange - Color change callback
    * @property {(tableName: string) => void} onEditDdl - Edit DDL callback
    * @property {(tableName: string) => void} onDropTable - Drop table callback
+   * @property {(tableName: string) => void} onCreateArrow - Create arrow callback
    * @property {() => void} onClose - Close menu callback
    */
 
   /** @type {ContextMenuProps} */
-  let { x, y, tableNames, currentColor, onColorChange, onEditDdl, onDropTable, onClose } = $props();
+  let { x, y, tableNames, currentColor, onColorChange, onEditDdl, onDropTable, onCreateArrow, onClose } = $props();
 
   // Display text for header
   let headerText = $derived(
@@ -81,6 +82,16 @@
   }
 
   /**
+   * Handle Create Arrow click.
+   */
+  function handleCreateArrow() {
+    if (tableNames.length === 1) {
+      onCreateArrow(tableNames[0]);
+      onClose();
+    }
+  }
+
+  /**
    * Handle clicks outside the menu.
    * @param {MouseEvent} e
    */
@@ -143,6 +154,12 @@
 
   {#if tableNames.length === 1}
     <div class="menu-divider"></div>
+    <button class="menu-item" onclick={handleCreateArrow}>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <path d="M3 8H13M13 8L9 4M13 8L9 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Create Arrow
+    </button>
     <button class="menu-item" onclick={handleEditDdl}>
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
         <path d="M5 4L2 8l3 4M11 4l3 4-3 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>

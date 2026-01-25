@@ -1,10 +1,14 @@
 <script>
+  import { Handle, Position } from '@xyflow/svelte';
+
   /**
    * @typedef {Object} NoteNodeData
    * @property {string} id
    * @property {string} text
    * @property {string} [color]
    * @property {(id: string, text: string) => void} onTextChange
+   * @property {boolean} [isArrowLinking]
+   * @property {(nodeId: string) => void} [onNodeClick]
    */
 
   /** @type {{ data: NoteNodeData }} */
@@ -74,10 +78,44 @@
   }
 </script>
 
+<!-- Center handles for arrow connections -->
+<Handle
+  id="left-center-source"
+  type="source"
+  position={Position.Left}
+  style="top: 50%"
+/>
+<Handle
+  id="left-center-target"
+  type="target"
+  position={Position.Left}
+  style="top: 50%"
+/>
+<Handle
+  id="right-center-source"
+  type="source"
+  position={Position.Right}
+  style="top: 50%"
+/>
+<Handle
+  id="right-center-target"
+  type="target"
+  position={Position.Right}
+  style="top: 50%"
+/>
+
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="note-node"
+  class:arrow-linking-target={data.isArrowLinking}
   style="background-color: {bgColor};"
   ondblclick={handleDoubleClick}
+  onclick={(e) => {
+    if (data.isArrowLinking) {
+      e.stopPropagation();
+      data.onNodeClick?.(data.id);
+    }
+  }}
   role="button"
   tabindex="0"
 >
@@ -156,5 +194,13 @@
   .note-textarea::placeholder {
     color: #9ca3af;
     font-style: italic;
+  }
+
+  .note-node.arrow-linking-target {
+    cursor: crosshair;
+  }
+
+  .note-node.arrow-linking-target:hover {
+    box-shadow: 0 0 0 2px var(--color-primary), 2px 2px 6px rgba(0, 0, 0, 0.15);
   }
 </style>

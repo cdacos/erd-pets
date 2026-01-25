@@ -16,6 +16,7 @@
  * @typedef {import('./types.js').Table} Table
  * @typedef {import('./types.js').ForeignKey} ForeignKey
  * @typedef {import('./types.js').Note} Note
+ * @typedef {import('./types.js').Arrow} Arrow
  */
 
 /**
@@ -689,4 +690,18 @@ export function updateNotePositions(notes, positionMap) {
     }
     return note;
   });
+}
+
+/**
+ * Generate a unique arrow ID.
+ * @param {Arrow[]} existingArrows
+ * @returns {string}
+ */
+export function generateArrowId(existingArrows) {
+  const existingIds = new Set(existingArrows.map((a) => a.id));
+  let counter = 1;
+  while (existingIds.has(`arrow-${counter}`)) {
+    counter++;
+  }
+  return `arrow-${counter}`;
 }

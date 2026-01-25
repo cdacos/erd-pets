@@ -110,13 +110,22 @@
  */
 
 /**
+ * @typedef {Object} Arrow
+ * @property {string} id - Unique identifier for the arrow
+ * @property {string} from - Source table (schema.table)
+ * @property {string} to - Target table (schema.table)
+ * @property {string} [label] - Optional label for the arrow
+ * @property {string} [color] - Hex color for the arrow edge
+ */
+
+/**
  * @typedef {Object} DiagramDefinition
  * @property {string} id - Unique identifier within file
  * @property {string} title - Display name
  * @property {DiagramTableEntry[]} tables
  * @property {RelationRule[]} [relations] - FK edge styling rules
  * @property {Note[]} [notes] - Sticky notes on the diagram
- * @property {any[]} [arrows] - Phase 2
+ * @property {Arrow[]} [arrows] - Custom arrows between tables
  */
 
 /**

@@ -42,6 +42,7 @@
     setTableVisibility,
     generateNoteId,
     updateNotePositions,
+    generateArrowId,
   } from './lib/parser/diagram.js';
 
   const nodeTypes = {
@@ -93,6 +94,11 @@
   /** @type {import('./lib/parser/types.js').Note[]} */
   let currentNotes = $derived(
     diagramFile?.diagrams.find((d) => d.id === selectedDiagramId)?.notes ?? []
+  );
+
+  /** @type {import('./lib/parser/types.js').Arrow[]} */
+  let currentArrows = $derived(
+    diagramFile?.diagrams.find((d) => d.id === selectedDiagramId)?.arrows ?? []
   );
 
   /** @type {import('./lib/DiagramToolbar.svelte').LayoutType | null} */
@@ -179,6 +185,9 @@
 
   /** @type {{ sourceTable: string, sourceColumn: string } | null} */
   let linkingState = $state(null);
+
+  /** @type {{ sourceId: string, sourceType: 'table' | 'note' } | null} */
+  let arrowLinkingState = $state(null);
 
   /** @type {string} */
   let prefilledSourceTable = $state('');
@@ -409,6 +418,155 @@
         onColumnClick: isLinking ? completeLinking : undefined,
       },
     }));
+  }
+
+  // ============================================================================
+  // Arrow linking (table-to-table)
+  // ============================================================================
+
+  /**
+   * Start arrow linking mode from a table.
+   * @param {string} tableName
+   */
+  function startArrowLinking(tableName) {
+    arrowLinkingState = { sourceId: tableName, sourceType: 'table' };
+    contextMenu = null;
+    // Update nodes to show arrow linking UI
+    updateNodesForArrowLinking(true);
+  }
+
+  /**
+   * Start arrow linking mode from a note.
+   * @param {string} noteId
+   */
+  function startArrowLinkingFromNote(noteId) {
+    arrowLinkingState = { sourceId: noteId, sourceType: 'note' };
+    noteContextMenu = null;
+    // Update nodes to show arrow linking UI
+    updateNodesForArrowLinking(true);
+  }
+
+  /**
+   * Cancel arrow linking mode.
+   */
+  function cancelArrowLinking() {
+    arrowLinkingState = null;
+    updateNodesForArrowLinking(false);
+  }
+
+  /**
+   * Complete arrow linking by clicking on a target (table or note).
+   * @param {string} targetId
+   */
+  function completeArrowLinking(targetId) {
+    if (!arrowLinkingState || !diagramFile || !selectedDiagramId) return;
+
+    const sourceId = arrowLinkingState.sourceId;
+
+    // Don't allow self-referential arrows
+    if (sourceId === targetId) {
+      showToast('Cannot create arrow to the same node.', 'error');
+      arrowLinkingState = null;
+      updateNodesForArrowLinking(false);
+      return;
+    }
+
+    // Create the arrow
+    const diagramIndex = diagramFile.diagrams.findIndex((d) => d.id === selectedDiagramId);
+    if (diagramIndex === -1) return;
+
+    const diagram = diagramFile.diagrams[diagramIndex];
+    const existingArrows = diagram.arrows ?? [];
+
+    /** @type {import('./lib/parser/types.js').Arrow} */
+    const newArrow = {
+      id: generateArrowId(existingArrows),
+      from: sourceId,
+      to: targetId,
+    };
+
+    // Update diagram file
+    const updatedArrows = [...existingArrows, newArrow];
+    const updatedDiagrams = [...diagramFile.diagrams];
+    updatedDiagrams[diagramIndex] = { ...diagram, arrows: updatedArrows };
+    diagramFile = { ...diagramFile, diagrams: updatedDiagrams };
+
+    // End arrow linking mode
+    arrowLinkingState = null;
+    updateNodesForArrowLinking(false);
+
+    // Re-render to show new edge
+    if (parseResult) {
+      const existingPositions = getNodePositions();
+      convertToFlowWithDiagram(updatedDiagrams[diagramIndex], parseResult.tables, parseResult.foreignKeys, existingPositions);
+    }
+
+    showToast('Arrow created.', 'success');
+  }
+
+  /**
+   * Update all nodes with arrow linking state and callbacks.
+   * @param {boolean} isArrowLinking
+   */
+  function updateNodesForArrowLinking(isArrowLinking) {
+    nodes = nodes.map((node) => {
+      if (node.type === 'table') {
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            isArrowLinking,
+            onTableClick: isArrowLinking ? completeArrowLinking : undefined,
+          },
+        };
+      }
+      if (node.type === 'note') {
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            isArrowLinking,
+            onNodeClick: isArrowLinking ? completeArrowLinking : undefined,
+          },
+        };
+      }
+      return node;
+    });
+  }
+
+  /**
+   * Handle arrow creation from sidebar (opens a simple flow).
+   */
+  function handleCreateArrowFromSidebar() {
+    showToast('Right-click a table or note and select "Create Arrow" to start.', 'info');
+  }
+
+  /**
+   * Delete an arrow.
+   * @param {import('./lib/parser/types.js').Arrow} arrow
+   */
+  function handleDeleteArrow(arrow) {
+    if (!diagramFile || !selectedDiagramId) return;
+
+    const diagramIndex = diagramFile.diagrams.findIndex((d) => d.id === selectedDiagramId);
+    if (diagramIndex === -1) return;
+
+    const diagram = diagramFile.diagrams[diagramIndex];
+    const existingArrows = diagram.arrows ?? [];
+
+    // Remove the arrow
+    const updatedArrows = existingArrows.filter((a) => a.id !== arrow.id);
+    const updatedDiagrams = [...diagramFile.diagrams];
+    updatedDiagrams[diagramIndex] = { ...diagram, arrows: updatedArrows };
+    diagramFile = { ...diagramFile, diagrams: updatedDiagrams };
+
+    // Re-render to remove edge
+    if (parseResult) {
+      const existingPositions = getNodePositions();
+      convertToFlowWithDiagram(updatedDiagrams[diagramIndex], parseResult.tables, parseResult.foreignKeys, existingPositions);
+    }
+
+    showToast('Arrow deleted.', 'success');
   }
 
   /**
@@ -642,10 +800,13 @@
     const noteNodes = diagramNotes.map((note) => {
       // Use existing position from canvas if available (for refresh scenarios)
       const existingNotePos = existingPositions?.get(note.id);
+      const notePos = existingNotePos ?? { x: note.x, y: note.y };
+      // Add note positions to positionMap for arrow edge calculation
+      positionMap.set(note.id, notePos);
       return {
         id: note.id,
         type: 'note',
-        position: existingNotePos ?? { x: note.x, y: note.y },
+        position: notePos,
         data: {
           id: note.id,
           text: note.text,
@@ -655,8 +816,53 @@
       };
     });
 
+    // Build set of all valid node IDs (tables + notes) for arrow validation
+    const diagramNoteIds = new Set(diagramNotes.map((n) => n.id));
+    const allNodeIds = new Set([...diagramTables, ...diagramNoteIds]);
+
+    // Build arrow edges from diagram arrows
+    const diagramArrows = diagram.arrows ?? [];
+    const arrowEdges = diagramArrows
+      .filter((arrow) => allNodeIds.has(arrow.from) && allNodeIds.has(arrow.to))
+      .map((arrow) => {
+        const sourcePos = positionMap.get(arrow.from);
+        const targetPos = positionMap.get(arrow.to);
+        // Use center handles for arrows (not column-specific)
+        const dx = (targetPos?.x ?? 0) - (sourcePos?.x ?? 0);
+        const sourceHandle = dx >= 0 ? 'right-center-source' : 'left-center-source';
+        const targetHandle = dx >= 0 ? 'left-center-target' : 'right-center-target';
+
+        // Build style string for color
+        const styleProps = [];
+        if (arrow.color) styleProps.push(`stroke: ${arrow.color}`);
+        const style = styleProps.length > 0 ? styleProps.join('; ') : undefined;
+
+        return {
+          id: `arrow-${arrow.id}`,
+          source: arrow.from,
+          target: arrow.to,
+          sourceHandle,
+          targetHandle,
+          type: 'tooltip',
+          style,
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 50,
+            height: 50,
+            color: arrow.color ?? markerColor,
+          },
+          data: {
+            sourceColumn: arrow.label ?? 'arrow',
+            targetColumn: arrow.label ?? 'arrow',
+            edgeStyle,
+            customMarkerColor: arrow.color,
+            isArrow: true,
+          },
+        };
+      });
+
     nodes = [...newNodes, ...noteNodes];
-    edges = newEdges;
+    edges = [...newEdges, ...arrowEdges];
   }
 
   /**
@@ -1880,10 +2086,16 @@
      * @param {KeyboardEvent} e
      */
     function handleKeydown(e) {
-      // Escape key cancels linking mode
-      if (e.key === 'Escape' && linkingState) {
-        cancelLinking();
-        return;
+      // Escape key cancels linking modes
+      if (e.key === 'Escape') {
+        if (linkingState) {
+          cancelLinking();
+          return;
+        }
+        if (arrowLinkingState) {
+          cancelArrowLinking();
+          return;
+        }
       }
 
       const isMod = e.metaKey || e.ctrlKey;
@@ -1953,6 +2165,11 @@
         onCreateNote={handleCreateNoteFromSidebar}
         onEditNote={handleEditNote}
         onDeleteNote={handleDeleteNote}
+        arrows={currentArrows}
+        onCenterArrowFrom={handleCenterTable}
+        onCenterArrowTo={handleCenterTable}
+        onCreateArrow={handleCreateArrowFromSidebar}
+        onDeleteArrow={handleDeleteArrow}
         focusSearch={focusTableSearch}
       />
     {/if}
@@ -1967,7 +2184,7 @@
         onnodedragstop={recalculateEdgeHandles}
         onnodecontextmenu={handleNodeContextMenu}
         onselectioncontextmenu={handleSelectionContextMenu}
-        onpaneclick={() => { closeContextMenu(); if (linkingState) cancelLinking(); }}
+        onpaneclick={() => { closeContextMenu(); if (linkingState) cancelLinking(); if (arrowLinkingState) cancelArrowLinking(); }}
         onpanecontextmenu={handlePaneContextMenu}
       >
         <Controls />
@@ -1989,6 +2206,7 @@
     onColorChange={(color) => handleTableColorChange(contextMenu.tableNames, color)}
     onEditDdl={handleShowTableSql}
     onDropTable={handleDropTableRequest}
+    onCreateArrow={startArrowLinking}
     onClose={closeContextMenu}
   />
 {/if}
@@ -2023,6 +2241,7 @@
     onColorChange={handleNoteColorChange}
     onEdit={handleEditNote}
     onDelete={handleDeleteNote}
+    onCreateArrow={startArrowLinkingFromNote}
     onClose={() => noteContextMenu = null}
   />
 {/if}

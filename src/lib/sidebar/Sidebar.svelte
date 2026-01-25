@@ -3,6 +3,7 @@
    * @typedef {import('../parser/types.js').Table} Table
    * @typedef {import('../parser/types.js').ForeignKey} ForeignKey
    * @typedef {import('../parser/types.js').Note} Note
+   * @typedef {import('../parser/types.js').Arrow} Arrow
    * @typedef {'tables' | 'relationships' | 'notes' | 'arrows'} SidebarMode
    */
 
@@ -28,6 +29,11 @@
    *   onCreateNote: () => void,
    *   onEditNote: (noteId: string) => void,
    *   onDeleteNote: (noteId: string) => void,
+   *   arrows: Arrow[],
+   *   onCenterArrowFrom: (tableName: string) => void,
+   *   onCenterArrowTo: (tableName: string) => void,
+   *   onCreateArrow: () => void,
+   *   onDeleteArrow: (arrow: Arrow) => void,
    *   focusSearch?: number
    * }} */
   let {
@@ -47,6 +53,11 @@
     onCreateNote,
     onEditNote,
     onDeleteNote,
+    arrows,
+    onCenterArrowFrom,
+    onCenterArrowTo,
+    onCreateArrow,
+    onDeleteArrow,
     focusSearch = 0,
   } = $props();
 
@@ -133,7 +144,7 @@
     {:else if mode === 'notes'}
       <NotesPanel {notes} onCenter={onCenterNote} onCreate={onCreateNote} onEdit={onEditNote} onDelete={onDeleteNote} {focusSearch} />
     {:else if mode === 'arrows'}
-      <ArrowsPanel />
+      <ArrowsPanel {arrows} {visibleTables} onCenterFrom={onCenterArrowFrom} onCenterTo={onCenterArrowTo} onCreate={onCreateArrow} onDelete={onDeleteArrow} {focusSearch} />
     {/if}
   </div>
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
