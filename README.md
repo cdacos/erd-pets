@@ -2,7 +2,7 @@
 
 Visual ERD editor that reads table definitions from SQL files.
 
-Philosophy: Similarly to the DevOps "pets vs cattle" metaphor, these are diagrams you layout manually, not having to rely on layout engines that can't understand intent. Albeit some layout algorithms (hierarchical, circular) are available, their intent is as an initial layout pending manual positioning.
+Philosophy: Similarly to the DevOps "pets vs cattle" metaphor, these are diagrams you layout manually, not having to rely on layout engines that can't understand intent. Albeit some layout algorithms (hierarchical, circular) are available, their purpose is for initial layout, pending manual positioning. The layout engines are biased per schema, as the assumption is that multiple schema are an indication that tables are already grouped by purpose as that level.
 
 *Please note:*
 
