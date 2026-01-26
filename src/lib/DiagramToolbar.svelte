@@ -80,66 +80,65 @@
   </button>
   <button onclick={onNew}>New</button>
   <button onclick={onLoad}>Open</button>
-  <button onclick={onRefresh} disabled={!fileLoaded}>Refresh</button>
-  <button onclick={onSave} disabled={!fileLoaded}>Save</button>
-  <select
-    class="export-select"
-    onchange={handleExportChange}
-    disabled={!fileLoaded}
-  >
-    <option value="">Export</option>
-    <option value="1x">WebP (1x)</option>
-    <option value="max">WebP (max)</option>
-  </select>
-  <select
-    class="layout-select"
-    onchange={handleLayoutChange}
-    disabled={!fileLoaded}
-  >
-    <option value="">Layout</option>
-    {#each layoutOptions as layout}
-      <option value={layout}>{layout.charAt(0).toUpperCase() + layout.slice(1)}</option>
-    {/each}
-  </select>
-  <select
-    value={edgeStyle}
-    onchange={(e) => onEdgeStyleChange(e.target.value)}
-  >
-    <option value="rounded">Edges: Rounded</option>
-    <option value="bezier">Edges: Bezier</option>
-  </select>
+  {#if fileLoaded}
+    <button onclick={onRefresh}>Refresh</button>
+    <button onclick={onSave}>Save</button>
+    <select
+      class="export-select"
+      onchange={handleExportChange}
+    >
+      <option value="">Export</option>
+      <option value="1x">WebP (1x)</option>
+      <option value="max">WebP (max)</option>
+    </select>
+    <select
+      class="layout-select"
+      onchange={handleLayoutChange}
+    >
+      <option value="">Layout</option>
+      {#each layoutOptions as layout}
+        <option value={layout}>{layout.charAt(0).toUpperCase() + layout.slice(1)}</option>
+      {/each}
+    </select>
+    <select
+      value={edgeStyle}
+      onchange={(e) => onEdgeStyleChange(e.target.value)}
+    >
+      <option value="rounded">Edges: Rounded</option>
+      <option value="bezier">Edges: Bezier</option>
+    </select>
+  {/if}
   <ThemeSelector />
-  {#if diagramFileName || sqlFileName}
+  {#if fileLoaded}
     <span class="file-names">
       {#if diagramFileName}<span class="file-name">{diagramFileName}</span>{/if}
       {#if diagramFileName && sqlFileName}<span class="separator">→</span>{/if}
       {#if sqlFileName}<span class="file-name sql"><span class="db-type">{dbType}</span> {sqlFileName}</span>{/if}
     </span>
+    <div class="diagram-selector">
+      <select
+        value={selectedDiagramId}
+        onchange={(e) => onDiagramChange(e.target.value)}
+        disabled={diagrams.length === 0}
+      >
+        {#each diagrams as d}
+          <option value={d.id}>{d.title}</option>
+        {/each}
+        {#if diagrams.length === 0}
+          <option value="">No diagrams</option>
+        {/if}
+      </select>
+      <button
+        class="add-diagram-btn"
+        onclick={onAddDiagram}
+        title="Add new diagram"
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
   {/if}
-  <div class="diagram-selector">
-    <select
-      value={selectedDiagramId}
-      onchange={(e) => onDiagramChange(e.target.value)}
-      disabled={diagrams.length === 0}
-    >
-      {#each diagrams as d}
-        <option value={d.id}>{d.title}</option>
-      {/each}
-      {#if diagrams.length === 0}
-        <option value="">No diagrams</option>
-      {/if}
-    </select>
-    <button
-      class="add-diagram-btn"
-      onclick={onAddDiagram}
-      disabled={!fileLoaded}
-      title="Add new diagram"
-    >
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      </svg>
-    </button>
-  </div>
 </header>
 
 <style>

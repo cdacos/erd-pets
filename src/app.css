@@ -172,6 +172,9 @@ html.dark .svelte-flow__controls {
 html.dark .svelte-flow__controls-button {
   background: var(--color-surface);
   border-color: var(--color-border);
+}
+
+html.dark .svelte-flow__controls-button svg {
   fill: var(--color-text-primary);
 }
 
