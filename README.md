@@ -7,7 +7,7 @@ Philosophy: Similarly to the DevOps "pets vs cattle" metaphor, these are diagram
 *Please note:*
 
 * *Chrome only* as the [File System Access](https://developer.chrome.com/docs/capabilities/web-apis/file-system-access) API is not standardised yet.
-* While functional for my specific use, this is still very much BETA software!
+* While functional for my specific use (PostgreSQL), this is still very much "beta" software! Primarily, more thorough SQL parsing. More databases to support.
 
 ## Install
 
