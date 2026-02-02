@@ -22,6 +22,7 @@
   import ContextMenu from './lib/ContextMenu.svelte';
   import PaneContextMenu from './lib/PaneContextMenu.svelte';
   import ColumnContextMenu from './lib/ColumnContextMenu.svelte';
+  import EdgeContextMenu from './lib/EdgeContextMenu.svelte';
   import NoteContextMenu from './lib/components/NoteContextMenu.svelte';
   import FlowInstanceCapture from './lib/FlowInstanceCapture.svelte';
   import { circularLayout } from './lib/layouts/circular.js';
@@ -190,6 +191,9 @@
   /** @type {{ x: number, y: number, noteId: string, color: string | undefined } | null} */
   let noteContextMenu = $state(null);
 
+  /** @type {{ x: number, y: number, edgeId: string, sourceTable: string, sourceColumn: string, targetTable: string, targetColumn: string, isArrow: boolean } | null} */
+  let edgeContextMenu = $state(null);
+
   /** @type {{ sourceTable: string, sourceColumn: string } | null} */
   let linkingState = $state(null);
 
@@ -355,6 +359,7 @@
     paneContextMenu = null;
     columnContextMenu = null;
     noteContextMenu = null;
+    edgeContextMenu = null;
   }
 
   /**
@@ -367,6 +372,60 @@
     contextMenu = null;
     paneContextMenu = null;
     columnContextMenu = { x: event.clientX, y: event.clientY, tableName, columnName };
+  }
+
+  /**
+   * Handle right-click on an edge (relationship or arrow).
+   * @param {{ event: MouseEvent, edge: import('@xyflow/svelte').Edge }} param
+   */
+  function handleEdgeContextMenu({ event, edge }) {
+    event.preventDefault();
+    closeContextMenu();
+
+    const isArrow = edge.data?.isArrow === true;
+    const sourceTable = edge.source;
+    const targetTable = edge.target;
+    const sourceColumn = edge.data?.sourceColumn ?? '';
+    const targetColumn = edge.data?.targetColumn ?? '';
+
+    edgeContextMenu = {
+      x: event.clientX,
+      y: event.clientY,
+      edgeId: edge.id,
+      sourceTable,
+      sourceColumn,
+      targetTable,
+      targetColumn,
+      isArrow,
+    };
+  }
+
+  /**
+   * Handle delete from edge context menu.
+   */
+  function handleEdgeContextMenuDelete() {
+    if (!edgeContextMenu) return;
+
+    if (edgeContextMenu.isArrow) {
+      // Find and delete the arrow
+      const arrowId = edgeContextMenu.edgeId.replace('arrow-', '');
+      const arrow = currentArrows.find((a) => a.id === arrowId);
+      if (arrow) {
+        handleDeleteArrow(arrow);
+      }
+    } else {
+      // Find and delete the foreign key relationship
+      const fk = parseResult?.foreignKeys.find(
+        (f) =>
+          f.sourceTable === edgeContextMenu.sourceTable &&
+          f.sourceColumn === edgeContextMenu.sourceColumn &&
+          f.targetTable === edgeContextMenu.targetTable &&
+          f.targetColumn === edgeContextMenu.targetColumn
+      );
+      if (fk) {
+        handleDeleteRelationship(fk);
+      }
+    }
   }
 
   /**
@@ -2362,6 +2421,7 @@
         onnodedragstop={recalculateEdgeHandles}
         onnodecontextmenu={handleNodeContextMenu}
         onselectioncontextmenu={handleSelectionContextMenu}
+        onedgecontextmenu={handleEdgeContextMenu}
         onpaneclick={() => { closeContextMenu(); if (linkingState) cancelLinking(); if (arrowLinkingState) cancelArrowLinking(); }}
         onpanecontextmenu={handlePaneContextMenu}
       >
@@ -2421,6 +2481,20 @@
     onDelete={handleDeleteNote}
     onCreateArrow={startArrowLinkingFromNote}
     onClose={() => noteContextMenu = null}
+  />
+{/if}
+
+{#if edgeContextMenu}
+  <EdgeContextMenu
+    x={edgeContextMenu.x}
+    y={edgeContextMenu.y}
+    sourceTable={edgeContextMenu.sourceTable}
+    sourceColumn={edgeContextMenu.sourceColumn}
+    targetTable={edgeContextMenu.targetTable}
+    targetColumn={edgeContextMenu.targetColumn}
+    isArrow={edgeContextMenu.isArrow}
+    onDelete={handleEdgeContextMenuDelete}
+    onClose={() => edgeContextMenu = null}
   />
 {/if}
 
