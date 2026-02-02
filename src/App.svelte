@@ -15,6 +15,7 @@
   import DiagramToolbar from './lib/DiagramToolbar.svelte';
   import ConfirmDialog from './lib/ConfirmDialog.svelte';
   import AddDiagramDialog from './lib/AddDiagramDialog.svelte';
+  import DiagramSettingsDialog from './lib/DiagramSettingsDialog.svelte';
   import CreateTableDialog from './lib/CreateTableDialog.svelte';
   import CreateRelationshipDialog from './lib/CreateRelationshipDialog.svelte';
   import Sidebar from './lib/sidebar/Sidebar.svelte';
@@ -113,6 +114,7 @@
   let showCreateTableDialog = $state(false);
   let showCreateRelationshipDialog = $state(false);
   let showAddDiagramDialog = $state(false);
+  let showDiagramSettingsDialog = $state(false);
 
   /** @type {string} */
   let editingTableName = $state('');
@@ -956,6 +958,87 @@
     convertToFlowWithDiagram(newDiagram, parseResult.tables, parseResult.foreignKeys);
 
     showToast(`Created diagram "${title}".`, 'success');
+  }
+
+  /**
+   * Open diagram settings dialog.
+   */
+  function handleDiagramSettings() {
+    if (!diagramFile || !selectedDiagramId) {
+      showToast('No diagram selected.', 'error');
+      return;
+    }
+    showDiagramSettingsDialog = true;
+  }
+
+  /**
+   * Rename the current diagram.
+   * @param {string} newTitle
+   */
+  function handleRenameDiagram(newTitle) {
+    if (!diagramFile || !selectedDiagramId) return;
+
+    const diagramIndex = diagramFile.diagrams.findIndex((d) => d.id === selectedDiagramId);
+    if (diagramIndex === -1) return;
+
+    const updatedDiagrams = [...diagramFile.diagrams];
+    updatedDiagrams[diagramIndex] = {
+      ...updatedDiagrams[diagramIndex],
+      title: newTitle,
+    };
+    diagramFile = { ...diagramFile, diagrams: updatedDiagrams };
+
+    showToast('Diagram renamed.', 'success');
+  }
+
+  /**
+   * Delete the current diagram.
+   */
+  function handleDeleteDiagram() {
+    if (!diagramFile || !selectedDiagramId || !parseResult) return;
+
+    if (diagramFile.diagrams.length <= 1) {
+      showToast('Cannot delete the only diagram.', 'error');
+      return;
+    }
+
+    const updatedDiagrams = diagramFile.diagrams.filter((d) => d.id !== selectedDiagramId);
+    diagramFile = { ...diagramFile, diagrams: updatedDiagrams };
+
+    // Select first remaining diagram
+    selectedDiagramId = updatedDiagrams[0].id;
+    const diagram = updatedDiagrams[0];
+    convertToFlowWithDiagram(diagram, parseResult.tables, parseResult.foreignKeys);
+
+    showDiagramSettingsDialog = false;
+    showToast('Diagram deleted.', 'success');
+  }
+
+  /**
+   * Update diagram table entries.
+   * @param {import('./lib/parser/types.js').DiagramTableEntry[]} entries
+   */
+  function handleUpdateDiagramEntries(entries) {
+    if (!diagramFile || !selectedDiagramId || !parseResult) return;
+
+    const diagramIndex = diagramFile.diagrams.findIndex((d) => d.id === selectedDiagramId);
+    if (diagramIndex === -1) return;
+
+    const updatedDiagrams = [...diagramFile.diagrams];
+    updatedDiagrams[diagramIndex] = {
+      ...updatedDiagrams[diagramIndex],
+      tables: entries,
+    };
+    diagramFile = { ...diagramFile, diagrams: updatedDiagrams };
+
+    // Re-render diagram with preserved positions
+    const existingPositions = getNodePositions();
+    convertToFlowWithDiagram(
+      updatedDiagrams[diagramIndex],
+      parseResult.tables,
+      parseResult.foreignKeys,
+      existingPositions
+    );
   }
 
   /**
@@ -2218,6 +2301,7 @@
     onEdgeStyleChange={handleEdgeStyleChange}
     onExport={handleExport}
     onAddDiagram={handleAddDiagram}
+    onDiagramSettings={handleDiagramSettings}
     {diagrams}
     selectedDiagramId={selectedDiagramId}
     fileLoaded={!!diagramHandle}
@@ -2401,6 +2485,16 @@
   open={showAddDiagramDialog}
   onSubmit={handleAddDiagramSubmit}
   onCancel={() => showAddDiagramDialog = false}
+/>
+
+<DiagramSettingsDialog
+  open={showDiagramSettingsDialog}
+  diagram={diagrams.find((d) => d.id === selectedDiagramId) ?? null}
+  sqlTables={parseResult?.tables ?? []}
+  onRenameDiagram={handleRenameDiagram}
+  onDeleteDiagram={handleDeleteDiagram}
+  onUpdateEntries={handleUpdateDiagramEntries}
+  onClose={() => showDiagramSettingsDialog = false}
 />
 
 <style>

@@ -309,7 +309,7 @@ export function parseDiagramFile(content) {
  * @param {string} pattern
  * @returns {boolean}
  */
-function isWildcard(pattern) {
+export function isWildcard(pattern) {
   return pattern === '*' || pattern.endsWith('*');
 }
 
@@ -319,7 +319,7 @@ function isWildcard(pattern) {
  * @param {Table[]} tables
  * @returns {string[]} - Qualified names of matching tables
  */
-function expandWildcard(pattern, tables) {
+export function expandWildcard(pattern, tables) {
   if (pattern === '*') {
     // Global wildcard: all tables
     return tables.map((t) => t.qualifiedName);
