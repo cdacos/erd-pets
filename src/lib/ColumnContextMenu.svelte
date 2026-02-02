@@ -5,7 +5,9 @@
    *   y: number,
    *   tableName: string,
    *   columnName: string,
+   *   isPrimaryKey: boolean,
    *   onCreateRelationship: () => void,
+   *   onTogglePrimaryKey: () => void,
    *   onClose: () => void
    * }}
    */
@@ -14,7 +16,9 @@
     y,
     tableName,
     columnName,
+    isPrimaryKey,
     onCreateRelationship,
+    onTogglePrimaryKey,
     onClose,
   } = $props();
 
@@ -57,6 +61,27 @@
       <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
     </svg>
     Create Relationship
+  </button>
+  <button
+    class="menu-item"
+    class:danger={isPrimaryKey}
+    onclick={() => {
+      onTogglePrimaryKey();
+      onClose();
+    }}
+  >
+    {#if isPrimaryKey}
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <path d="M2 4h12M5.333 4V2.667a1.333 1.333 0 0 1 1.334-1.334h2.666a1.333 1.333 0 0 1 1.334 1.334V4m2 0v9.333a1.333 1.333 0 0 1-1.334 1.334H4.667a1.333 1.333 0 0 1-1.334-1.334V4h9.334z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Remove from Primary Key
+    {:else}
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <path d="M10 1.333A2.667 2.667 0 0 1 12.667 4v1.333H14a.667.667 0 0 1 .667.667v8a.667.667 0 0 1-.667.667H2a.667.667 0 0 1-.667-.667V6a.667.667 0 0 1 .667-.667h1.333V4A2.667 2.667 0 0 1 6 1.333" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="8" cy="10" r="1.5" fill="currentColor"/>
+      </svg>
+      Add to Primary Key
+    {/if}
   </button>
 </div>
 

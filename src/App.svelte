@@ -35,7 +35,7 @@
     saveNewDiagramFile,
     isFileSystemAccessSupported,
   } from './lib/fileManager.js';
-  import { parsePostgresSQL, generateForeignKeySql, removeForeignKeyStatement } from './lib/parser/postgres.js';
+  import { parsePostgresSQL, generateForeignKeySql, removeForeignKeyStatement, addPrimaryKeyColumn, removePrimaryKeyColumn } from './lib/parser/postgres.js';
   import {
     parseDiagramFile,
     resolveDiagramTables,
@@ -185,7 +185,7 @@
   /** @type {{ x: number, y: number } | null} */
   let paneContextMenu = $state(null);
 
-  /** @type {{ x: number, y: number, tableName: string, columnName: string } | null} */
+  /** @type {{ x: number, y: number, tableName: string, columnName: string, isPrimaryKey: boolean } | null} */
   let columnContextMenu = $state(null);
 
   /** @type {{ x: number, y: number, noteId: string, color: string | undefined } | null} */
@@ -367,11 +367,12 @@
    * @param {MouseEvent} event
    * @param {string} tableName
    * @param {string} columnName
+   * @param {boolean} isPrimaryKey
    */
-  function handleColumnContextMenu(event, tableName, columnName) {
+  function handleColumnContextMenu(event, tableName, columnName, isPrimaryKey) {
     contextMenu = null;
     paneContextMenu = null;
-    columnContextMenu = { x: event.clientX, y: event.clientY, tableName, columnName };
+    columnContextMenu = { x: event.clientX, y: event.clientY, tableName, columnName, isPrimaryKey };
   }
 
   /**
@@ -1604,6 +1605,56 @@
   }
 
   /**
+   * Toggle primary key status for a column.
+   * @param {string} tableName - Qualified table name (schema.table)
+   * @param {string} columnName
+   * @param {boolean} currentlyPrimaryKey
+   */
+  async function handleTogglePrimaryKey(tableName, columnName, currentlyPrimaryKey) {
+    if (!sqlHandle) {
+      showToast('No SQL file loaded.', 'error');
+      return;
+    }
+
+    try {
+      const result = currentlyPrimaryKey
+        ? removePrimaryKeyColumn(sqlContent, tableName, columnName)
+        : addPrimaryKeyColumn(sqlContent, tableName, columnName);
+
+      if ('error' in result) {
+        showToast(result.error, 'error');
+        return;
+      }
+
+      await saveToFile(sqlHandle, result.sql);
+      sqlContent = result.sql;
+
+      parseResult = parsePostgresSQL(sqlContent);
+
+      if (parseResult.errors.length > 0) {
+        for (const error of parseResult.errors) {
+          showToast(error.message || String(error), 'error');
+        }
+      }
+
+      if (diagramFile && selectedDiagramId) {
+        const diagram = diagramFile.diagrams.find((d) => d.id === selectedDiagramId);
+        if (diagram) {
+          const existingPositions = getNodePositions();
+          convertToFlowWithDiagram(diagram, parseResult.tables, parseResult.foreignKeys, existingPositions);
+        }
+      }
+
+      showToast(
+        currentlyPrimaryKey ? 'Removed from primary key.' : 'Added to primary key.',
+        'success'
+      );
+    } catch (err) {
+      showToast(err.message || 'Failed to update primary key.', 'error');
+    }
+  }
+
+  /**
    * Handle layout button click from toolbar.
    * Shows confirmation dialog before applying.
    * @param {import('./lib/DiagramToolbar.svelte').LayoutType} layoutType
@@ -2465,7 +2516,9 @@
     y={columnContextMenu.y}
     tableName={columnContextMenu.tableName}
     columnName={columnContextMenu.columnName}
+    isPrimaryKey={columnContextMenu.isPrimaryKey}
     onCreateRelationship={() => startLinking(columnContextMenu.tableName, columnContextMenu.columnName)}
+    onTogglePrimaryKey={() => handleTogglePrimaryKey(columnContextMenu.tableName, columnContextMenu.columnName, columnContextMenu.isPrimaryKey)}
     onClose={() => columnContextMenu = null}
   />
 {/if}

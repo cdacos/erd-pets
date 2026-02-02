@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { tokenize, TokenStream } from './tokenizer.js';
-import { parsePostgresSQL, generateForeignKeySql, removeForeignKeyStatement } from './postgres.js';
+import { parsePostgresSQL, generateForeignKeySql, removeForeignKeyStatement, addPrimaryKeyColumn, removePrimaryKeyColumn } from './postgres.js';
 
 describe('tokenizer', () => {
 	it('tokenizes simple SQL', () => {
@@ -1053,5 +1053,148 @@ ALTER TABLE party.datum ADD FOREIGN KEY (datum_type_id) REFERENCES party.datum_t
 		expect(result.sql).not.toContain('ALTER TABLE asset.datum');
 		// Should still contain the party FK
 		expect(result.sql).toContain('ALTER TABLE party.datum ADD FOREIGN KEY (datum_type_id) REFERENCES party.datum_type');
+	});
+});
+
+describe('addPrimaryKeyColumn', () => {
+	it('adds new PRIMARY KEY when none exists', () => {
+		const sql = `
+CREATE TABLE public.users (
+  id BIGINT,
+  name TEXT
+);
+`;
+		const result = addPrimaryKeyColumn(sql, 'public.users', 'id');
+		expect(result).toHaveProperty('sql');
+		expect(result.sql).toContain('ALTER TABLE public.users ADD PRIMARY KEY (id)');
+	});
+
+	it('extends existing ALTER TABLE PRIMARY KEY to compound key', () => {
+		const sql = `
+CREATE TABLE public.users (
+  id BIGINT,
+  tenant_id BIGINT,
+  name TEXT
+);
+
+ALTER TABLE public.users ADD PRIMARY KEY (id);
+`;
+		const result = addPrimaryKeyColumn(sql, 'public.users', 'tenant_id');
+		expect(result).toHaveProperty('sql');
+		expect(result.sql).toContain('PRIMARY KEY (id, tenant_id)');
+		expect(result.sql).not.toContain('PRIMARY KEY (id);');
+	});
+
+	it('extends existing table-level PRIMARY KEY constraint', () => {
+		const sql = `
+CREATE TABLE public.users (
+  id BIGINT,
+  tenant_id BIGINT,
+  name TEXT,
+  PRIMARY KEY (id)
+);
+`;
+		const result = addPrimaryKeyColumn(sql, 'public.users', 'tenant_id');
+		expect(result).toHaveProperty('sql');
+		expect(result.sql).toContain('PRIMARY KEY (id, tenant_id)');
+	});
+
+	it('converts column-level PRIMARY KEY to compound key', () => {
+		const sql = `
+CREATE TABLE public.users (
+  id BIGINT PRIMARY KEY,
+  tenant_id BIGINT,
+  name TEXT
+);
+`;
+		const result = addPrimaryKeyColumn(sql, 'public.users', 'tenant_id');
+		expect(result).toHaveProperty('sql');
+		expect(result.sql).toContain('PRIMARY KEY (id, tenant_id)');
+		expect(result.sql).not.toContain('BIGINT PRIMARY KEY');
+	});
+});
+
+describe('removePrimaryKeyColumn', () => {
+	it('removes entire ALTER TABLE PRIMARY KEY when single column', () => {
+		const sql = `
+CREATE TABLE public.users (
+  id BIGINT,
+  name TEXT
+);
+
+ALTER TABLE public.users ADD PRIMARY KEY (id);
+`;
+		const result = removePrimaryKeyColumn(sql, 'public.users', 'id');
+		expect(result).toHaveProperty('sql');
+		expect(result.sql).not.toContain('PRIMARY KEY');
+		expect(result.sql).not.toContain('ALTER TABLE');
+	});
+
+	it('removes column from compound ALTER TABLE PRIMARY KEY', () => {
+		const sql = `
+CREATE TABLE public.users (
+  id BIGINT,
+  tenant_id BIGINT,
+  name TEXT
+);
+
+ALTER TABLE public.users ADD PRIMARY KEY (id, tenant_id);
+`;
+		const result = removePrimaryKeyColumn(sql, 'public.users', 'tenant_id');
+		expect(result).toHaveProperty('sql');
+		expect(result.sql).toContain('PRIMARY KEY (id)');
+		expect(result.sql).not.toContain('PRIMARY KEY (id, tenant_id)');
+	});
+
+	it('removes entire table-level PRIMARY KEY constraint when single column', () => {
+		const sql = `
+CREATE TABLE public.users (
+  id BIGINT,
+  name TEXT,
+  PRIMARY KEY (id)
+);
+`;
+		const result = removePrimaryKeyColumn(sql, 'public.users', 'id');
+		expect(result).toHaveProperty('sql');
+		expect(result.sql).not.toContain('PRIMARY KEY');
+	});
+
+	it('removes column from compound table-level PRIMARY KEY', () => {
+		const sql = `
+CREATE TABLE public.users (
+  id BIGINT,
+  tenant_id BIGINT,
+  name TEXT,
+  PRIMARY KEY (id, tenant_id)
+);
+`;
+		const result = removePrimaryKeyColumn(sql, 'public.users', 'tenant_id');
+		expect(result).toHaveProperty('sql');
+		expect(result.sql).toContain('PRIMARY KEY (id)');
+		expect(result.sql).not.toContain(', tenant_id');
+	});
+
+	it('removes column-level PRIMARY KEY', () => {
+		const sql = `
+CREATE TABLE public.users (
+  id BIGINT PRIMARY KEY,
+  name TEXT
+);
+`;
+		const result = removePrimaryKeyColumn(sql, 'public.users', 'id');
+		expect(result).toHaveProperty('sql');
+		expect(result.sql).not.toContain('PRIMARY KEY');
+		expect(result.sql).toContain('id BIGINT');
+	});
+
+	it('returns error when column not found in PRIMARY KEY', () => {
+		const sql = `
+CREATE TABLE public.users (
+  id BIGINT PRIMARY KEY,
+  name TEXT
+);
+`;
+		const result = removePrimaryKeyColumn(sql, 'public.users', 'name');
+		expect(result).toHaveProperty('error');
 	});
 });

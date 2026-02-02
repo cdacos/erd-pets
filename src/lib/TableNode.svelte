@@ -107,7 +107,7 @@
         oncontextmenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          data.onColumnContextMenu?.(e, data.label, column.name);
+          data.onColumnContextMenu?.(e, data.label, column.name, column.isPrimaryKey);
         }}
         onclick={(e) => {
           if (data.isLinking) {

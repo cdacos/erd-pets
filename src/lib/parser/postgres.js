@@ -783,6 +783,186 @@ export function removeForeignKeyStatement(sqlContent, fk) {
 }
 
 /**
+ * Add a column to the primary key of a table.
+ * If a PK already exists, creates a compound key. Otherwise creates a new PK.
+ *
+ * @param {string} sqlContent - The full SQL content
+ * @param {string} tableName - Qualified table name (schema.table)
+ * @param {string} columnName - Column to add to PK
+ * @returns {{ sql: string } | { error: string }}
+ */
+export function addPrimaryKeyColumn(sqlContent, tableName, columnName) {
+	const [schema, table] = tableName.split('.');
+	const tablePattern = buildTableNamePattern(schema, table);
+
+	// First, try to find existing ALTER TABLE ... ADD PRIMARY KEY
+	const alterPkPattern = new RegExp(
+		`(ALTER\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?${tablePattern}\\s+ADD\\s+(?:CONSTRAINT\\s+[\\w"]+\\s+)?PRIMARY\\s+KEY\\s*\\()([^)]+)(\\)[^;]*;)`,
+		'gi'
+	);
+
+	const alterMatch = alterPkPattern.exec(sqlContent);
+	if (alterMatch) {
+		// Extend existing ALTER TABLE PK with new column
+		const before = alterMatch[1];
+		const existingColumns = alterMatch[2];
+		const after = alterMatch[3];
+		const newColumns = `${existingColumns.trim()}, ${columnName}`;
+		const newStatement = before + newColumns + after;
+
+		const newSqlContent = sqlContent.slice(0, alterMatch.index) + newStatement + sqlContent.slice(alterMatch.index + alterMatch[0].length);
+		return { sql: newSqlContent.trim() + '\n' };
+	}
+
+	// Try to find inline PRIMARY KEY in CREATE TABLE (either column-level or table-level constraint)
+	const createTablePattern = new RegExp(
+		`(CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?${tablePattern}\\s*\\()([^;]+)(\\)\\s*;)`,
+		'gis'
+	);
+
+	const createMatch = createTablePattern.exec(sqlContent);
+	if (createMatch) {
+		const createStart = createMatch[1];
+		const createBody = createMatch[2];
+		const createEnd = createMatch[3];
+
+		// Check for table-level PRIMARY KEY constraint: PRIMARY KEY (col1, col2)
+		const tablePkPattern = /(,?\s*(?:CONSTRAINT\s+[\w"]+\s+)?PRIMARY\s+KEY\s*\()([^)]+)(\))/gi;
+		const tablePkMatch = tablePkPattern.exec(createBody);
+
+		if (tablePkMatch) {
+			// Extend table-level PK constraint
+			const pkBefore = tablePkMatch[1];
+			const existingColumns = tablePkMatch[2];
+			const pkAfter = tablePkMatch[3];
+			const newColumns = `${existingColumns.trim()}, ${columnName}`;
+			const newBody = createBody.slice(0, tablePkMatch.index) + pkBefore + newColumns + pkAfter + createBody.slice(tablePkMatch.index + tablePkMatch[0].length);
+			const newSqlContent = sqlContent.slice(0, createMatch.index) + createStart + newBody + createEnd + sqlContent.slice(createMatch.index + createMatch[0].length);
+			return { sql: newSqlContent.trim() + '\n' };
+		}
+
+		// Check for column-level PRIMARY KEY on a different column
+		const columnPkPattern = /("?\w+"?\s+[^,)]+?)\s+PRIMARY\s+KEY/gi;
+		const columnPkMatch = columnPkPattern.exec(createBody);
+
+		if (columnPkMatch) {
+			// Convert column-level PK to table-level compound PK
+			// First, find the column name from the match
+			const colDefMatch = /^"?(\w+)"?/.exec(columnPkMatch[1].trim());
+			if (colDefMatch) {
+				const existingPkColumn = colDefMatch[1];
+				// Remove PRIMARY KEY from column definition
+				const newBody = createBody.replace(/(\s+)PRIMARY\s+KEY/i, '');
+				// Add table-level compound PK at the end
+				const trimmedBody = newBody.trimEnd();
+				const hasTrailingComma = trimmedBody.endsWith(',');
+				const bodyWithConstraint = trimmedBody + (hasTrailingComma ? '' : ',') + `\n  PRIMARY KEY (${existingPkColumn}, ${columnName})`;
+				const newSqlContent = sqlContent.slice(0, createMatch.index) + createStart + bodyWithConstraint + createEnd + sqlContent.slice(createMatch.index + createMatch[0].length);
+				return { sql: newSqlContent.trim() + '\n' };
+			}
+		}
+	}
+
+	// No existing PK found - append ALTER TABLE ADD PRIMARY KEY
+	const alterStatement = `\nALTER TABLE ${tableName} ADD PRIMARY KEY (${columnName});\n`;
+	return { sql: sqlContent.trim() + alterStatement };
+}
+
+/**
+ * Remove a column from the primary key of a table.
+ * If it's the last column, removes the entire PK constraint.
+ *
+ * @param {string} sqlContent - The full SQL content
+ * @param {string} tableName - Qualified table name (schema.table)
+ * @param {string} columnName - Column to remove from PK
+ * @returns {{ sql: string } | { error: string }}
+ */
+export function removePrimaryKeyColumn(sqlContent, tableName, columnName) {
+	const [schema, table] = tableName.split('.');
+	const tablePattern = buildTableNamePattern(schema, table);
+
+	// First, try to find ALTER TABLE ... ADD PRIMARY KEY
+	const alterPkPattern = new RegExp(
+		`(ALTER\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?${tablePattern}\\s+ADD\\s+(?:CONSTRAINT\\s+[\\w"]+\\s+)?PRIMARY\\s+KEY\\s*\\()([^)]+)(\\)[^;]*;)`,
+		'gi'
+	);
+
+	const alterMatch = alterPkPattern.exec(sqlContent);
+	if (alterMatch) {
+		const existingColumns = alterMatch[2]
+			.split(',')
+			.map((c) => c.trim().replace(/^"|"$/g, ''));
+
+		if (existingColumns.length === 1) {
+			// Remove entire ALTER TABLE statement
+			return { sql: removeRangeWithWhitespace(sqlContent, alterMatch.index, alterMatch.index + alterMatch[0].length).replace(/\n{3,}/g, '\n\n').trim() + '\n' };
+		}
+
+		// Remove just the column from the list
+		const newColumns = existingColumns.filter((c) => c.toLowerCase() !== columnName.toLowerCase()).join(', ');
+		const newStatement = alterMatch[1] + newColumns + alterMatch[3];
+		const newSqlContent = sqlContent.slice(0, alterMatch.index) + newStatement + sqlContent.slice(alterMatch.index + alterMatch[0].length);
+		return { sql: newSqlContent.trim() + '\n' };
+	}
+
+	// Try to find inline PRIMARY KEY in CREATE TABLE
+	const createTablePattern = new RegExp(
+		`(CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?${tablePattern}\\s*\\()([^;]+)(\\)\\s*;)`,
+		'gis'
+	);
+
+	const createMatch = createTablePattern.exec(sqlContent);
+	if (!createMatch) {
+		return { error: `Could not find table ${tableName} in the SQL.` };
+	}
+
+	const createStart = createMatch[1];
+	const createBody = createMatch[2];
+	const createEnd = createMatch[3];
+
+	// Check for table-level PRIMARY KEY constraint: PRIMARY KEY (col1, col2)
+	const tablePkPattern = /(,?\s*(?:CONSTRAINT\s+[\w"]+\s+)?PRIMARY\s+KEY\s*\()([^)]+)(\))/gi;
+	const tablePkMatch = tablePkPattern.exec(createBody);
+
+	if (tablePkMatch) {
+		const existingColumns = tablePkMatch[2]
+			.split(',')
+			.map((c) => c.trim().replace(/^"|"$/g, ''));
+
+		if (existingColumns.length === 1) {
+			// Remove entire constraint
+			const newBody = createBody.slice(0, tablePkMatch.index) + createBody.slice(tablePkMatch.index + tablePkMatch[0].length);
+			// Clean up any trailing comma before the removed constraint
+			const cleanedBody = newBody.replace(/,(\s*)$/, '$1');
+			const newSqlContent = sqlContent.slice(0, createMatch.index) + createStart + cleanedBody + createEnd + sqlContent.slice(createMatch.index + createMatch[0].length);
+			return { sql: newSqlContent.replace(/\n{3,}/g, '\n\n').trim() + '\n' };
+		}
+
+		// Remove just the column from the list
+		const newColumns = existingColumns.filter((c) => c.toLowerCase() !== columnName.toLowerCase()).join(', ');
+		const newBody = createBody.slice(0, tablePkMatch.index) + tablePkMatch[1] + newColumns + tablePkMatch[3] + createBody.slice(tablePkMatch.index + tablePkMatch[0].length);
+		const newSqlContent = sqlContent.slice(0, createMatch.index) + createStart + newBody + createEnd + sqlContent.slice(createMatch.index + createMatch[0].length);
+		return { sql: newSqlContent.trim() + '\n' };
+	}
+
+	// Check for column-level PRIMARY KEY
+	const columnPkPattern = new RegExp(
+		`("?${escapeRegex(columnName)}"?\\s+[^,)]+?)\\s+PRIMARY\\s+KEY`,
+		'gi'
+	);
+	const columnPkMatch = columnPkPattern.exec(createBody);
+
+	if (columnPkMatch) {
+		// Remove PRIMARY KEY from the column definition
+		const newBody = createBody.slice(0, columnPkMatch.index) + columnPkMatch[1] + createBody.slice(columnPkMatch.index + columnPkMatch[0].length);
+		const newSqlContent = sqlContent.slice(0, createMatch.index) + createStart + newBody + createEnd + sqlContent.slice(createMatch.index + createMatch[0].length);
+		return { sql: newSqlContent.trim() + '\n' };
+	}
+
+	return { error: `Could not find PRIMARY KEY definition for column ${columnName} in ${tableName}.` };
+}
+
+/**
  * Remove a range from content, cleaning up surrounding whitespace.
  * @param {string} content
  * @param {number} start
