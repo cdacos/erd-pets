@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { tokenize, TokenStream } from './tokenizer.js';
-import { parsePostgresSQL, generateForeignKeySql, removeForeignKeyStatement, addPrimaryKeyColumn, removePrimaryKeyColumn } from './postgres.js';
+import { parsePostgresSQL, generateForeignKeySql, removeForeignKeyStatement, addPrimaryKeyColumn, removePrimaryKeyColumn, findOrphanedAlterTables, removeOrphanedAlterTables } from './postgres.js';
 
 describe('tokenizer', () => {
 	it('tokenizes simple SQL', () => {
@@ -1196,5 +1196,167 @@ CREATE TABLE public.users (
 `;
 		const result = removePrimaryKeyColumn(sql, 'public.users', 'name');
 		expect(result).toHaveProperty('error');
+	});
+});
+
+describe('findOrphanedAlterTables', () => {
+	it('returns empty array when all ALTER TABLEs reference existing tables', () => {
+		const sql = `
+CREATE TABLE public.users (id BIGINT);
+CREATE TABLE public.posts (id BIGINT, user_id BIGINT);
+ALTER TABLE public.users ADD PRIMARY KEY (id);
+ALTER TABLE public.posts ADD PRIMARY KEY (id);
+ALTER TABLE public.posts ADD FOREIGN KEY (user_id) REFERENCES public.users (id);
+`;
+		const orphaned = findOrphanedAlterTables(sql);
+		expect(orphaned).toHaveLength(0);
+	});
+
+	it('finds ALTER TABLE referencing non-existent table', () => {
+		const sql = `
+CREATE TABLE public.users (id BIGINT);
+ALTER TABLE public.users ADD PRIMARY KEY (id);
+ALTER TABLE public.posts ADD PRIMARY KEY (id);
+`;
+		const orphaned = findOrphanedAlterTables(sql);
+		expect(orphaned).toHaveLength(1);
+		expect(orphaned[0].tableName).toBe('public.posts');
+		expect(orphaned[0].statement).toContain('ALTER TABLE public.posts');
+	});
+
+	it('finds multiple orphaned ALTER TABLEs', () => {
+		const sql = `
+CREATE TABLE public.users (id BIGINT);
+ALTER TABLE public.users ADD PRIMARY KEY (id);
+ALTER TABLE public.posts ADD PRIMARY KEY (id);
+ALTER TABLE public.comments ADD PRIMARY KEY (id);
+ALTER TABLE public.posts ADD FOREIGN KEY (user_id) REFERENCES public.users (id);
+`;
+		const orphaned = findOrphanedAlterTables(sql);
+		expect(orphaned).toHaveLength(3);
+		const tableNames = orphaned.map((o) => o.tableName);
+		expect(tableNames).toContain('public.posts');
+		expect(tableNames).toContain('public.comments');
+	});
+
+	it('handles schema-qualified table names', () => {
+		const sql = `
+CREATE TABLE contract.users (id BIGINT);
+ALTER TABLE contract.users ADD PRIMARY KEY (id);
+ALTER TABLE contract.posts ADD PRIMARY KEY (id);
+`;
+		const orphaned = findOrphanedAlterTables(sql);
+		expect(orphaned).toHaveLength(1);
+		expect(orphaned[0].tableName).toBe('contract.posts');
+	});
+
+	it('handles quoted identifiers', () => {
+		const sql = `
+CREATE TABLE contract."grant" (id BIGINT);
+ALTER TABLE contract."grant" ADD PRIMARY KEY (id);
+ALTER TABLE contract."order" ADD PRIMARY KEY (id);
+`;
+		const orphaned = findOrphanedAlterTables(sql);
+		expect(orphaned).toHaveLength(1);
+		expect(orphaned[0].tableName).toBe('contract.order');
+	});
+
+	it('includes position information for removal', () => {
+		const sql = `CREATE TABLE public.users (id BIGINT);
+ALTER TABLE public.deleted ADD PRIMARY KEY (id);`;
+		const orphaned = findOrphanedAlterTables(sql);
+		expect(orphaned).toHaveLength(1);
+		expect(orphaned[0].start).toBeGreaterThan(0);
+		expect(orphaned[0].end).toBeGreaterThan(orphaned[0].start);
+		expect(sql.substring(orphaned[0].start, orphaned[0].end)).toBe('ALTER TABLE public.deleted ADD PRIMARY KEY (id);');
+	});
+
+	it('finds ALTER TABLE with REFERENCES to non-existent table', () => {
+		const sql = `
+CREATE TABLE party.company (id BIGINT, party_id BIGINT);
+ALTER TABLE party.company ADD PRIMARY KEY (id);
+ALTER TABLE party.company ADD FOREIGN KEY (party_id) REFERENCES party.party;
+`;
+		const orphaned = findOrphanedAlterTables(sql);
+		expect(orphaned).toHaveLength(1);
+		expect(orphaned[0].tableName).toBe('party.party');
+		expect(orphaned[0].statement).toContain('REFERENCES party.party');
+	});
+
+	it('finds both target and REFERENCES orphans', () => {
+		const sql = `
+CREATE TABLE public.users (id BIGINT);
+ALTER TABLE public.users ADD PRIMARY KEY (id);
+ALTER TABLE public.posts ADD PRIMARY KEY (id);
+ALTER TABLE public.users ADD FOREIGN KEY (org_id) REFERENCES public.orgs;
+`;
+		const orphaned = findOrphanedAlterTables(sql);
+		expect(orphaned).toHaveLength(2);
+		const tableNames = orphaned.map((o) => o.tableName);
+		expect(tableNames).toContain('public.posts');
+		expect(tableNames).toContain('public.orgs');
+	});
+});
+
+describe('removeOrphanedAlterTables', () => {
+	it('removes orphaned ALTER TABLE statements', () => {
+		const sql = `
+CREATE TABLE public.users (id BIGINT);
+
+ALTER TABLE public.users ADD PRIMARY KEY (id);
+
+ALTER TABLE public.posts ADD PRIMARY KEY (id);
+`;
+		const orphaned = findOrphanedAlterTables(sql);
+		const result = removeOrphanedAlterTables(sql, orphaned);
+
+		expect(result).toContain('CREATE TABLE public.users');
+		expect(result).toContain('ALTER TABLE public.users ADD PRIMARY KEY');
+		expect(result).not.toContain('ALTER TABLE public.posts');
+	});
+
+	it('removes multiple orphaned statements', () => {
+		const sql = `
+CREATE TABLE public.users (id BIGINT);
+ALTER TABLE public.users ADD PRIMARY KEY (id);
+ALTER TABLE public.posts ADD PRIMARY KEY (id);
+ALTER TABLE public.comments ADD PRIMARY KEY (id);
+ALTER TABLE public.posts ADD FOREIGN KEY (user_id) REFERENCES public.users (id);
+`;
+		const orphaned = findOrphanedAlterTables(sql);
+		const result = removeOrphanedAlterTables(sql, orphaned);
+
+		expect(result).toContain('CREATE TABLE public.users');
+		expect(result).toContain('ALTER TABLE public.users ADD PRIMARY KEY');
+		expect(result).not.toContain('ALTER TABLE public.posts');
+		expect(result).not.toContain('ALTER TABLE public.comments');
+	});
+
+	it('returns original SQL when no orphaned statements', () => {
+		const sql = `
+CREATE TABLE public.users (id BIGINT);
+ALTER TABLE public.users ADD PRIMARY KEY (id);
+`;
+		const orphaned = findOrphanedAlterTables(sql);
+		const result = removeOrphanedAlterTables(sql, orphaned);
+
+		expect(result.trim()).toBe(sql.trim());
+	});
+
+	it('cleans up excessive newlines after removal', () => {
+		const sql = `
+CREATE TABLE public.users (id BIGINT);
+
+
+ALTER TABLE public.deleted ADD PRIMARY KEY (id);
+
+
+ALTER TABLE public.users ADD PRIMARY KEY (id);
+`;
+		const orphaned = findOrphanedAlterTables(sql);
+		const result = removeOrphanedAlterTables(sql, orphaned);
+
+		// Should not have more than 2 consecutive newlines
+		expect(result).not.toMatch(/\n{3,}/);
 	});
 });

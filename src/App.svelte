@@ -35,7 +35,7 @@
     saveNewDiagramFile,
     isFileSystemAccessSupported,
   } from './lib/fileManager.js';
-  import { parsePostgresSQL, generateForeignKeySql, removeForeignKeyStatement, addPrimaryKeyColumn, removePrimaryKeyColumn } from './lib/parser/postgres.js';
+  import { parsePostgresSQL, generateForeignKeySql, removeForeignKeyStatement, addPrimaryKeyColumn, removePrimaryKeyColumn, findOrphanedAlterTables, removeOrphanedAlterTables } from './lib/parser/postgres.js';
   import {
     parseDiagramFile,
     resolveDiagramTables,
@@ -127,6 +127,11 @@
   let tableToDelete = $state('');
 
   let showDropTableConfirm = $state(false);
+
+  let showIntegrityCheckConfirm = $state(false);
+
+  /** @type {import('./lib/parser/types.js').OrphanedAlterTable[]} */
+  let pendingOrphanedAlterTables = $state([]);
 
   /** @type {import('./lib/DiagramToolbar.svelte').EdgeStyle} */
   let edgeStyle = $state('rounded');
@@ -1246,6 +1251,7 @@
 
   /**
    * Handle Save button click.
+   * Checks for orphaned ALTER TABLE statements before saving.
    */
   async function handleSave() {
     if (!diagramHandle || !diagramFile) {
@@ -1253,6 +1259,23 @@
       return;
     }
 
+    // Check for orphaned ALTER TABLE statements
+    if (sqlContent) {
+      const orphaned = findOrphanedAlterTables(sqlContent);
+      if (orphaned.length > 0) {
+        pendingOrphanedAlterTables = orphaned;
+        showIntegrityCheckConfirm = true;
+        return;
+      }
+    }
+
+    await performSave();
+  }
+
+  /**
+   * Perform the actual save operation.
+   */
+  async function performSave() {
     try {
       // Collect positions from nodes
       const nodePositions = getNodePositions();
@@ -1292,6 +1315,40 @@
     } catch (err) {
       showToast(err.message || 'Failed to save file.', 'error');
     }
+  }
+
+  /**
+   * Apply integrity fix: remove orphaned ALTER TABLE statements and save.
+   */
+  async function applyIntegrityFix() {
+    showIntegrityCheckConfirm = false;
+
+    if (pendingOrphanedAlterTables.length > 0 && sqlHandle) {
+      try {
+        const newSqlContent = removeOrphanedAlterTables(sqlContent, pendingOrphanedAlterTables);
+        await saveToFile(sqlHandle, newSqlContent);
+        sqlContent = newSqlContent;
+
+        // Re-parse SQL to update state
+        parseResult = parsePostgresSQL(newSqlContent);
+
+        showToast(`Removed ${pendingOrphanedAlterTables.length} orphaned ALTER TABLE statement(s).`, 'info');
+      } catch (err) {
+        showToast(err.message || 'Failed to fix SQL file.', 'error');
+      }
+    }
+
+    pendingOrphanedAlterTables = [];
+    await performSave();
+  }
+
+  /**
+   * Skip integrity fix and proceed with save.
+   */
+  async function skipIntegrityFix() {
+    showIntegrityCheckConfirm = false;
+    pendingOrphanedAlterTables = [];
+    await performSave();
   }
 
   /**
@@ -2576,6 +2633,16 @@
   confirmLabel="Drop Table"
   onConfirm={applyDropTable}
   onCancel={cancelDropTable}
+/>
+
+<ConfirmDialog
+  open={showIntegrityCheckConfirm}
+  title="Orphaned Statements Found"
+  message={`Found ${pendingOrphanedAlterTables.length} ALTER TABLE statement(s) referencing non-existent tables: ${pendingOrphanedAlterTables.map(o => o.tableName).join(', ')}. Would you like to remove them from the SQL file?`}
+  confirmLabel="Remove"
+  cancelLabel="Skip"
+  onConfirm={applyIntegrityFix}
+  onCancel={skipIntegrityFix}
 />
 
 <CreateTableDialog

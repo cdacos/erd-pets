@@ -150,4 +150,12 @@
  * @property {string} [originalPattern] - The wildcard pattern that matched this table
  */
 
+/**
+ * @typedef {Object} OrphanedAlterTable
+ * @property {string} tableName - The qualified table name referenced by the ALTER TABLE
+ * @property {number} start - Start position in the SQL string
+ * @property {number} end - End position in the SQL string (after the semicolon)
+ * @property {string} statement - The full ALTER TABLE statement text
+ */
+
 export {};

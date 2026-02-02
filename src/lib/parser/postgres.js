@@ -1,4 +1,4 @@
-/** @import { Table, Column, ForeignKey, ParseError, ParseResult } from './types.js' */
+/** @import { Table, Column, ForeignKey, ParseError, ParseResult, OrphanedAlterTable } from './types.js' */
 import { tokenize, TokenStream } from './tokenizer.js';
 
 /**
@@ -1006,4 +1006,101 @@ function buildTableNamePattern(schema, tableName) {
 	const schemaPattern = `(?:"?${escapeRegex(schema)}"?\\.)?`;
 	const tablePattern = `"?${escapeRegex(tableName)}"?`;
 	return schemaPattern + tablePattern;
+}
+
+/**
+ * Find ALTER TABLE statements that reference tables without a corresponding CREATE TABLE.
+ * Checks both the target table and any REFERENCES clauses.
+ * @param {string} sql - The SQL content to check
+ * @returns {OrphanedAlterTable[]}
+ */
+export function findOrphanedAlterTables(sql) {
+	// First, parse the SQL to get all defined tables
+	const { tables } = parsePostgresSQL(sql);
+	const definedTables = new Set(tables.map((t) => t.qualifiedName));
+
+	/** @type {OrphanedAlterTable[]} */
+	const orphaned = [];
+
+	// Track which statements we've already flagged to avoid duplicates
+	/** @type {Set<number>} */
+	const flaggedPositions = new Set();
+
+	// Find all ALTER TABLE statements using regex
+	// Pattern: ALTER TABLE [IF EXISTS] [schema.]table ...;
+	const alterTablePattern = /ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?("?\w+"?(?:\."?\w+"?)?)[^;]*;/gi;
+
+	let match;
+	while ((match = alterTablePattern.exec(sql)) !== null) {
+		const tableRef = match[1];
+		const qualifiedName = normalizeTableName(tableRef);
+		const statement = match[0];
+
+		// Check if the ALTER TABLE target doesn't exist
+		if (!definedTables.has(qualifiedName)) {
+			orphaned.push({
+				tableName: qualifiedName,
+				start: match.index,
+				end: match.index + statement.length,
+				statement
+			});
+			flaggedPositions.add(match.index);
+			continue;
+		}
+
+		// Check if any REFERENCES clause points to a non-existent table
+		const referencesPattern = /REFERENCES\s+("?\w+"?(?:\."?\w+"?)?)/gi;
+		let refMatch;
+		while ((refMatch = referencesPattern.exec(statement)) !== null) {
+			const refTableName = normalizeTableName(refMatch[1]);
+			if (!definedTables.has(refTableName) && !flaggedPositions.has(match.index)) {
+				orphaned.push({
+					tableName: refTableName,
+					start: match.index,
+					end: match.index + statement.length,
+					statement
+				});
+				flaggedPositions.add(match.index);
+				break; // Only flag once per statement
+			}
+		}
+	}
+
+	return orphaned;
+}
+
+/**
+ * Normalize a table name reference to qualified form (schema.table).
+ * @param {string} tableRef - Table reference like "schema.table", schema.table, or just table
+ * @returns {string}
+ */
+function normalizeTableName(tableRef) {
+	// Remove quotes and normalize
+	const cleaned = tableRef.replace(/"/g, '');
+	if (cleaned.includes('.')) {
+		return cleaned.toLowerCase();
+	}
+	return `public.${cleaned.toLowerCase()}`;
+}
+
+/**
+ * Remove orphaned ALTER TABLE statements from SQL content.
+ * @param {string} sql - The SQL content
+ * @param {OrphanedAlterTable[]} orphaned - The orphaned statements to remove
+ * @returns {string}
+ */
+export function removeOrphanedAlterTables(sql, orphaned) {
+	if (orphaned.length === 0) {
+		return sql;
+	}
+
+	// Sort by position descending so we can remove from end to start
+	const sorted = [...orphaned].sort((a, b) => b.start - a.start);
+
+	let result = sql;
+	for (const item of sorted) {
+		result = removeRangeWithWhitespace(result, item.start, item.end);
+	}
+
+	return result.replace(/\n{3,}/g, '\n\n').trim() + '\n';
 }
